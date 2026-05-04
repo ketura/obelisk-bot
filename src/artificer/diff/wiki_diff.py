@@ -203,11 +203,3 @@ def diff_emit_dirs(
             )
         )
     return diff
-h=rel,
-                status=status,
-                old_lines=len(old_lines),
-                new_lines=len(new_lines),
-                diff_text=diff_text,
-            )
-        )
-    return diff
