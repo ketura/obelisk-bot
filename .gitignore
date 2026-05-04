@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtualenv / uv
+.venv/
+venv/
+env/
+.python-version
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project artifacts
+out/                       # rendered wikitext
+extracted/                 # canonical JSON dumps from extraction
+diffs/                     # rendered changelogs
+*.local.toml               # local config overrides (bot creds etc)
+secrets.toml
+.artificer/
+
+# .wheelhouse/ — sandbox-only dev convenience.
+# Linux/cp310 wheels for offline pip install in the assistant's no-network sandbox.
+# Anyone else just runs 'pip install -e .[dev]' normally.
+.wheelhouse/
+artificer.ini
+
+out/
+out_test/
+.venv-sandbox/
