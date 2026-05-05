@@ -6,6 +6,7 @@ from artificer.models.common import (
     Sid,
     SidRef,
 )
+from artificer.models.faction import FactionRecord
 from artificer.models.localization import (
     SUPPORTED_LANGUAGES,
     LocalizationCorpus,
@@ -23,6 +24,7 @@ __all__ = [
     "SUPPORTED_LANGUAGES",
     "AttackSlot",
     "Faction",
+    "FactionRecord",
     "LocalizationCorpus",
     "LocalizationEntry",
     "ResourceCost",

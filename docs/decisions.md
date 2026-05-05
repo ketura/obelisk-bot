@@ -354,7 +354,14 @@ extraction (OEE bundles this). Out of scope for the current data layer.
 ## D-021 — UnitAttack: shared reference tables + one per-unit fat row
 
 **Date:** 2026-05-04
-**Status:** Locked. Revised same-day after first cut.
+**Status:** PARTIALLY SUPERSEDED by D-024. The `AttackArchetype` /
+`AttackArchetypeTranslation` halves of this decision migrated into
+the unified `Entry` table as `type=attack_archetype` rows; the seed
+values and the JSON-enum naming flip (`range` → `reach`) remain
+authoritative. The `UnitAttack` and `AttackPassive` halves are
+**unchanged** and remain in their own dedicated tables (they have
+columns beyond the Entry name+desc+i18n shape, so they don't fit
+the catch-all rule).
 
 Empirical analysis of the 2026-05-03 patch found 376 attack entries
 across 152 units boil down to a small fixed structure plus a few dials.
@@ -441,6 +448,445 @@ player-facing name for the `attackPen` stat passive (rank derives from
 the value: 0.3 → I, 0.4 → II, 0.5 → III). The current `stat_passive`
 synthesis with the placeholder name "Unyielding" should be updated to
 use the `pierce` family.
+
+## D-022 — Movement reference table: 2 rows, hand-curated
+
+**Date:** 2026-05-04
+**Status:** SUPERSEDED by D-024. The schema and seed values described
+here are unchanged in spirit — they migrated wholesale into the
+unified `Entry` table as `type=movement` rows. The naming-flip note
+(`teleport` → "Blink") and the eldritch_flyer divergence note remain
+authoritative; only the table structure is replaced.
+
+Movement type is a small enum carried by `stats.moveType` in each
+unit's logic file. Empirical analysis of the 2026-05-03 patch found
+exactly three values across 149 units: `fly` (32), `teleport` (17), and
+absent (100, implicit walker). Same shape as D-021's `AttackArchetype`
+collapse — small fixed enum, shared player-facing name/description text
+in the L10n corpus, currently flowing through `shared_abilities` as
+duplicated SID tokens on every flyer/teleporter unit page.
+
+**Resolution:** add `Movement` + `MovementTranslation` reference tables
+under `docs/cargo/shared/`, mirroring the `AttackArchetype` pair.
+
+**Schema:** exactly **2 rows** — `fly` and `teleport`. Each row carries
+the canned passive name/description from the L10n family.
+
+| `move_type` | `name_sid` | `desc_sid` |
+| --- | --- | --- |
+| `fly` | `base_passive_flyer_name` | `base_passive_flyer_description` |
+| `teleport` | `base_passive_blink_name` | `base_passive_blink_description` |
+
+**Walkers are encoded as absence**, not as a row. Units without
+`move_type` set on their `Unit` row are walkers — matches how the
+source data treats them (`stats.moveType` is omitted on walkers; there
+is no `base_passive_walker_*` SID family). Sparse, consistent with the
+"omit fields whose source JSON didn't define them" rule from D-013.
+
+**Considered and rejected:**
+
+- **3 rows including `walk` with hand-curated text** — would have
+  given consistent table coverage, but introduced a synthesized row
+  with no source-data analog. Sparse-by-default wins on principle
+  (D-013) and on diff cleanliness (the walker row would never change
+  upstream, so storing it adds noise to no benefit).
+
+**Naming flip:** JSON enum `teleport` → L10n family token `blink`.
+Same pattern as D-021's `range` → `reach`. The bot keeps the JSON
+value through to `Unit.move_type` (`teleport`, not `blink`); the
+display name "Blink" lives on the `Movement` reference row.
+
+**Divergence (3 units): `eldritch_flyer` family.** Has
+`stats.moveType=teleport` mechanically but lists `base_passive_flyer_name`
+in `views.passives[]`, so the in-game tooltip shows "Flying" while the
+mechanical move type is teleport. Per D-011 (JSON is ground truth), we
+trust `stats.moveType`: `Unit.move_type=teleport` for these units. The
+audit can flag the divergence so wiki readers know the views display
+differs from the mechanical truth.
+
+**`shared_abilities` not changed.** The `base_passive_flyer_name` /
+`base_passive_blink_name` SIDs continue to flow into `Unit.shared_abilities`
+via the existing views-passive path. Slight redundancy with the new
+reference table, but safer than risking template-side breakage in the
+existing wiki layer. Future cleanup if/when shared_abilities gets
+restructured.
+
+**Pattern reuse:** identical to D-021's AttackArchetype/AttackPassive
+work. Same code path (`MOVEMENT_SEEDS` dict + `emit_movement_page`
+function in `emit/unit.py`), same output shape (`Data:Movement/<move_type>`
+pages under `data/movement/`), same translation discovery (full
+16-language coverage confirmed in 2026-05-03 corpus).
+
+## D-023 — CreatureType reference table: 7 rows, hand-curated
+
+**Date:** 2026-05-04
+**Status:** SUPERSEDED by D-024. The schema and seed values described
+here are unchanged in spirit — they migrated wholesale into the
+unified `Entry` table as `type=creature_type` rows. The naming-flip
+note (`demon` → "Hive Spawn"), the missing-views-baseClass observation
+for `avatar`/`halfling`, and the placeholder-resolution explanation
+all remain authoritative; only the table structure is replaced.
+
+Creature class is a small enum carried indirectly by each unit's
+`<type>_immunities` passive tag. The bot's existing extractor
+(`_classify_passive_attributes` in `extract/unit.py`) walks those tags,
+strips the `_immunities` suffix, and stashes the result on
+`Unit.creature_type`. Empirical analysis of the 2026-05-03 patch found
+exactly seven values across all 152 units: `living` (44),
+`magic_creature` (32), `undead` (23), `demon` (23), `embodiment` (20),
+`dragon` (8), `construct` (2). All seven have full English text and
+descriptions in the L10n corpus.
+
+Same shape as D-022's `Movement` collapse — small fixed enum, shared
+player-facing name/description text in the L10n corpus, currently
+flowing through the `Unit.creature_type` column with no canonical
+display label or description anywhere on the wiki side.
+
+**Resolution:** add `CreatureType` + `CreatureTypeTranslation`
+reference tables under `docs/cargo/shared/`, mirroring the `Movement`
+pair.
+
+**Schema:** exactly **7 rows** — `living`, `undead`, `demon`,
+`magic_creature`, `embodiment`, `dragon`, `construct`. Each row
+carries the canned class name/description from the L10n family.
+
+| `creature_type` | `display_name` | `name_sid` | `desc_sid` |
+| --- | --- | --- | --- |
+| `living` | Living | `base_class_living` | `base_class_living_description` |
+| `undead` | Undead | `base_class_undead` | `base_class_undead_description` |
+| `demon` | Hive Spawn | `base_class_demon` | `base_class_demon_description` |
+| `magic_creature` | Magic Creature | `base_class_magic_creature` | `base_class_magic_creature_description` |
+| `embodiment` | Embodiment | `base_class_embodiment` | `base_class_embodiment_description` |
+| `dragon` | Dragon | `base_class_dragon` | `base_class_dragon_description` |
+| `construct` | Construct | `base_class_construct` | `base_class_construct_description` |
+
+**Naming flip:** the `demon` enum displays as **"Hive Spawn"** in the
+in-game class panel (lore reframe of OE's demon faction as a
+hivemind). Same kind of JSON-vs-display flip as `range`→`reach`
+(D-021) and `teleport`→`blink` (D-022). The bot keeps `demon` as the
+join key everywhere; the "Hive Spawn" label lives on this row's
+`display_name`.
+
+**SID family**: `base_class_*` (NOT `base_passive_*` — distinguishes
+class labels from gameplay passives). Description text contains
+`{0}`/`{1}`/`{2}`/`{3}` placeholders for morale and luck range
+bounds. These are resolved by the existing pipeline at extract time:
+`Lang/args/unitsAbility.json` maps each `base_class_*_description` SID
+to a list of arg SIDs (e.g. `base_passive_luck_moral_5`), each of
+which `units.script` resolves to a literal via `Text(return, "5")`.
+The args are class-wide constants, not per-unit values — so the
+description ships fully substituted ("Morale range: –5 to 5.") on the
+reference table row, no per-unit context required.
+
+**Missing-data note:** four units in the 2026-05-03 patch have a
+derived `creature_type` (immunity tags present) but no
+`views.baseClass` entry — `avatar`, `avatar_nature`, `avatar_unfrozen`,
+`halfling`. Three are unused per D-020. This is *not* a "two-signal
+disagreement" case like the eldritch_flyer movement divergence
+(D-022) — the immunity tags are authoritative; the views file simply
+doesn't render a class label for these units. Wiki layer joins on
+`Unit.creature_type` and surfaces the canonical class name regardless.
+
+**Pattern reuse:** identical to D-022's Movement work. Same code path
+(`CREATURE_TYPE_SEEDS` dict + `emit_creature_type_page` function in
+`emit/unit.py`), same output shape (`Data:CreatureType/<creature_type>`
+pages under `data/creature_types/`), same translation discovery (full
+16-language coverage confirmed in 2026-05-03 corpus).
+
+## D-024 — Unified `Entry` catch-all table; supersedes D-022, D-023, and AttackArchetype halves of D-021
+
+**Date:** 2026-05-04
+**Status:** Locked.
+
+`AttackArchetype`, `Movement`, and `CreatureType` (each with its own
+`<Entity>Translation` sibling) were three pairs of tables of
+**identical shape**: an enum primary key, English `display_name` +
+`description`, source `name_sid` + `desc_sid`, and 15 per-language
+`<lang>_name` / `<lang>_desc` columns. Six tables encoding the same
+abstraction. Adding the next domain (e.g. faction, biome, resource
+category) would have repeated the pattern again.
+
+**Resolution:** collapse them into one table called `Entry`, keyed
+on `(type, subtype)`. Translations merge into the same row as
+inline per-language columns — no separate translation table.
+
+```mediawiki
+{{#cargo_declare:_table=Entry
+| type = String         <- attack_archetype, movement, creature_type, ...
+| subtype = String      <- melee, fly, undead, ...
+| display_name = String
+| description = Wikitext
+| icon = String         <- optional
+| name_sid = String
+| desc_sid = String
+| pt_br_name = String
+| pt_br_desc = Wikitext
+| ...                   <- 15 langs total, name + desc each
+}}
+```
+
+**Page layout:** per-domain top-level pages
+(`Data:Movement/<subtype>`, `Data:CreatureType/<subtype>`,
+`Data:AttackArchetype/<subtype>`, ...) with on-disk files at
+`data/<type>/<subtype>.wiki.txt`. The `Entry` abstraction surfaces
+*only* in the Cargo table name and the `{{Entry | …}}` template
+invocations inside each page — user-facing wiki paths stay rooted in
+game concepts (Movement, CreatureType, AttackArchetype) that already
+have meaning to readers and editors.
+
+**Subtype collision risk:** by going flat per-domain, two unrelated
+domains can't share a subtype value at the wiki path level (since
+they live under different namespaces — `Data:Movement/fly` and a
+hypothetical `Data:Buff/fly` would coexist cleanly). Inside the
+single `Entry` Cargo table, `(type, subtype)` is still the primary
+key, so the data side handles collisions naturally.
+
+**Directory→namespace mapping:** lives in `_DIR_TO_WIKI_TABLE`
+(`src/artificer/diff/wiki_diff.py`). Add an entry there when
+introducing a new Entry type so the diff/upload pipeline knows the
+PascalCase name to use in `Data:<…>/<subtype>` page titles.
+
+**Initial migration:** three types, 12 rows total.
+- `attack_archetype`: melee, ranged, reach (was `AttackArchetype`)
+- `movement`: fly, teleport (was `Movement`)
+- `creature_type`: living, undead, demon, magic_creature, embodiment,
+  dragon, construct (was `CreatureType`)
+
+All naming flips, divergence notes, and seed values from D-021
+(partial), D-022, and D-023 carry through unchanged. The display name
+"Hive Spawn" for the `demon` subtype, "Long Reach" for `reach`,
+"Blink" for `teleport` — all live as the row's `display_name`.
+
+**The catch-all rule (worth memorizing):** if a piece of reference
+data has *only* a name, description, and translations — and nothing
+else — it goes into `Entry` as a new `type` value. As soon as it
+needs an additional column (rank, cost, prerequisite, formula, etc.)
+it earns its own dedicated table.
+
+**Why `AttackPassive` stays separate:** it carries `pattern_token`
+and `rank` columns. Adding those to `Entry` would either pollute the
+generic schema with one-off fields or push the AttackPassive data
+into wikitext-only sidecars that lose Cargo queryability. Reference
+> duplication only when shapes match exactly.
+
+**`icon` field included from the start.** None of the migrated
+domains carry an icon today, so the column is universally empty in
+the initial rollout — but it's the most likely "what we'd add next"
+field for future Entry types (resources, hero stats, magic schools,
+etc.). Sparse-emit semantics mean the field costs nothing for rows
+that don't use it.
+
+**Code shape:** one `ENTRY_SEEDS: dict[type, dict[subtype, info]]` in
+`emit/unit.py`, one `emit_entry_page(type, subtype, ...)` function,
+one CLI writer loop that walks the nested seeds dict. Replaces three
+parallel seed dicts and three parallel emit functions. Net: ~200
+lines deleted, one cohesive code path remaining.
+
+**Considered and rejected:**
+
+- **Keep the per-domain tables, add a base template they all inherit
+  from.** MediaWiki templates can compose, but Cargo tables can't —
+  a shared base wouldn't cut the table count, just the wikitext
+  duplication. The point is to consolidate the *data*, not the
+  rendering.
+
+- **Use one Entry table but keep separate `EntryTranslation` for
+  i18n.** Theoretical normalization win; in practice the tables are
+  always queried together (every wiki render of an entry needs both
+  the English defaults and the active locale's translation), so the
+  join cost outweighs any storage benefit. Inline columns also let
+  the bot emit one row per file instead of two, halving the page
+  count.
+
+- **Naming: `Glossary`, `Codex`, `Lexicon`, `Term`, ...** — `Entry`
+  won on neutrality; the table isn't fantasy-flavored or
+  dictionary-flavored, just a generic "named thing with a
+  description."
+
+## D-025 — Faction tables + city-name Entry rows
+
+**Date:** 2026-05-04
+**Status:** Locked.
+
+Faction is the first "complex enough to need its own table" category
+we've extracted (vs the simple Entry-shaped reference data tackled in
+D-022/D-023/D-024). Captures the faction-level structural data plus
+the city-name pool, and defers the law tree to a separate decision.
+
+**Source:** `Core/DB/fractions/<n>_<id>.json`. Six files, one per
+faction. `id` ∈ {`human`, `undead`, `dungeon`, `nature`, `demon`,
+`unfrozen`}. (The source spelling is `fraction*`; the bot already
+normalizes to `faction*` everywhere visible — `Faction` enum
+established for the unit `faction` column lives in
+`models/common.py`.)
+
+**Per-faction fields captured on `Faction` table:**
+- `id`
+- `name` (resolved English) + `name_sid`
+- `desc` (resolved English Wikitext) + `desc_sid`
+- `icon` (asset filename, source: `icon`)
+- `icon_faction_laws` (asset filename, source: `iconFractionLaws` —
+  normalized)
+- `biome` (`Grass` | `Deathland` | `Dirt` | `Autumn` | `Lava` |
+  `Snow`)
+- `resource` (`gemstones` | `mercury` | `crystals`, source:
+  `resourceName` — normalized)
+- `source_path` (for traceability)
+
+**`FactionTranslation`** mirrors the `UnitTranslation` shape: one row
+per faction with `name_sid` / `desc_sid` plus 15 × per-language
+(name, desc) pairs. Full 16-language coverage on both SIDs in the
+2026-05-03 corpus.
+
+**`narrativeDesc` is dropped.** Source JSON references
+`<id>_narrative_desc` SIDs (e.g. `human_narrative_desc`); none of
+those SIDs exist in *any* language file in the 2026-05-03 corpus —
+dead pointer. Storing the SID with no resolvable text adds noise; if
+a future patch populates the L10n we'll revisit.
+
+**City names → `Entry` rows** with `type=FactionCityName`, subtype
+`<faction>_<index>` (e.g. `dungeon_1` … `dungeon_20`). 6 × 20 = 120
+rows. Each row carries the city's `name_sid` and the resolved English
++ 15 non-English translations. **City names are genuinely localized**
+(8-16 distinct strings per name across the 16 languages — CJK
+languages get full character-set translations; Latin scripts mix
+preservation, idiomatic translation, and phonetic transliteration).
+Description columns are sparse-emitted (no description SIDs exist
+for city names).
+
+**City Entry rows live on the parent faction page,** not on individual
+`Data:FactionCityName/…` pages. The 20 `{{Entry | type=FactionCityName |
+…}}` invocations are appended to the faction's wiki page in numeric
+source order (1..N), after `{{Faction}}` and `{{FactionTranslation}}`.
+Cargo doesn't care which page does the `#cargo_store` call — the rows
+land in the unified `Entry` table either way — and consolidating them
+keeps the per-faction view (one wiki page → all data for that faction)
+intact for editors and readers alike. There is no `data/faction_city_name/`
+output directory.
+
+**Why Entry rows for city names instead of a dedicated
+`FactionCityName` table:** the per-row shape is exactly
+name+i18n-only, which is what Entry is for. Promoting it to its own
+table would be premature when the Entry catch-all already has the
+right schema. Per the D-024 rule: "if it has *only* a name,
+description, and translations — and nothing else — it goes into
+`Entry` as a new `type` value."
+
+**Why Faction is *not* an Entry row:** the structural fields (icon,
+icon_faction_laws, biome, resource) push it past the
+name+desc+i18n-only line. Per the D-024 rule, that earns a dedicated
+table.
+
+**Code shape:**
+- `models/faction.py` (new) — `FactionRecord` model
+- `extract/faction.py` (new) — `extract_factions(paths)` walks
+  `DB/fractions/*.json`
+- `emit/faction.py` (new) — `emit_faction_page(faction, corpus,
+  resolver)` renders `{{Faction}}` + `{{FactionTranslation}}`
+- `emit/unit.py` — `emit_entry_page` refactored to take SID
+  parameters directly so it serves both curated seed data and
+  per-patch extracted Entry data; `emit_entry_page_from_seed`
+  added for the curated path
+- CLI: extract factions, emit faction pages, emit per-faction city
+  Entry rows
+
+**Output layout** (consistent with established conventions):
+- `data/factions/<id>.wiki.txt` → `Data:Faction/<id>` (plural dir,
+  matches the Unit/AttackPassive convention for dedicated tables).
+  Each file holds three concerns: the `{{Faction}}` row, the
+  `{{FactionTranslation}}` row, and the 20 inline city `{{Entry}}`
+  rows.
+
+**Deferred:**
+- `fractionLawsLines` (the 5-line × 2-group × 2-4-law skill tree
+  shape on each faction). Captured-or-not pending the FactionLaw
+  work that ingests `DB/fractions_laws/`.
+- Promoting Entry data flow to support extract-time-derived rows
+  beyond city names is now possible (the refactored
+  `emit_entry_page` accepts SID params directly); no dedicated Entry
+  type registry needed for the per-patch case — extract/emit modules
+  hand-call `emit_entry_page` with the `(type, subtype, name_sid,
+  desc_sid)` they want.
+
+## D-026 — Unified `Translation` table; supersedes per-entity *Translation tables
+
+**Date:** 2026-05-04
+**Status:** Locked.
+
+`UnitTranslation`, `FactionTranslation`, `AttackPassiveTranslation`
+(and prospective `HeroTranslation`, `HeroClassTranslation`,
+`HeroSpecializationTranslation`, `HeroSubClassTranslation`) all share
+the **identical** shape: `<entity>_id`, `name_sid`, `desc_sid`, then
+15 × `<lang>_name` / `<lang>_desc` columns. Same play as D-024 did
+for the small reference tables: collapse the parallel structure into
+one shared `Translation` table with a `type` discriminator column.
+
+**Resolution:** introduce `Translation` (in
+`docs/cargo/shared/Translation.md`) keyed on `(type, target_id)`.
+Delete the per-entity translation docs. Refactor each entity emitter
+(`emit_unit_page`, `emit_faction_page`, `emit_attack_passive_page`,
+…) to render `{{Translation | type=… | target_id=… | …}}` instead
+of `{{<Entity>Translation | …}}`.
+
+**Schema:** identical to the deleted per-entity tables, plus a `type`
+column at the head:
+
+```mediawiki
+{{#cargo_declare:_table=Translation
+| type = String              <!-- unit, faction, attack_passive, hero, hero_class, ... -->
+| target_id = String
+| name_sid = String
+| desc_sid = String
+| pt_br_name = String
+| pt_br_desc = Wikitext
+| ...                        <!-- 15 langs -->
+}}
+```
+
+**Page layout unchanged.** Each translation row still lives on its
+parent entity's data page (`Data:Unit/<id>`, `Data:Faction/<id>`,
+…), appended after the structural row. There is no
+`Data:Translation/…` page namespace — the table is store-only.
+
+**Why this is *not* an Entry:** Entry rows carry inline English
+defaults (`display_name`, `description`) and an `icon` field, plus
+they're the *primary* representation of small reference enums (no
+parent table). Translation is a *side* payload alongside an existing
+parent entity (Unit, Faction, …) which carries its own English
+defaults; the Translation row holds the 15 non-English locales only.
+Same shape ≠ same role. Keeping them separate avoids the schema
+gymnastics of "is this Entry row a primary or a side payload?"
+
+**Code shape:** one `render_translation_block(type, target_id,
+name_sid, desc_sid, corpus, resolver)` helper alongside
+`render_entry_block` in `emit/unit.py`. Each entity emitter calls
+the helper instead of building its own per-entity translation
+parameter dict.
+
+**Deletes:**
+- `docs/cargo/UnitTranslation.md`
+- `docs/cargo/UnitAbilityTranslation.md`
+- `docs/cargo/FactionTranslation.md`
+- `docs/cargo/AttackPassiveTranslation.md`
+
+The convenience filter columns previously on `UnitAbilityTranslation`
+(`unit_id`, `ability_type`, `ordinal`, `variant`) are dropped. Any
+display-side query that needs them joins to `UnitAbility` on
+`target_id` — those columns already live there. Cargo joins are
+cheap; column duplication for filter convenience is the kind of
+schema drift this consolidation exists to prevent.
+
+**Considered and rejected:**
+- **Merge into Entry.** Tempting given the shape overlap, but
+  conflates two semantics: "this row IS the entity" (Entry) vs
+  "this row is the i18n alongside the entity" (Translation).
+  Display-side queries differ in pattern, and Entry's `(type,
+  subtype)` PK doesn't quite match Translation's natural
+  `(type, target_id)` shape (entries can stand alone; translations
+  always join to a parent).
+- **Per-entity `<Entity>Translation` tables, keep parallel.** Status
+  quo with growing surface area as new entities come online — the
+  D-024 lesson rerunning.
 
 ## Open questions / known unknowns
 

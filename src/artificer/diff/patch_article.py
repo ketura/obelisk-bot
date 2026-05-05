@@ -5,18 +5,28 @@ from __future__ import annotations
 from artificer.diff.wiki_diff import WikiDiff, WikiPageDiff
 
 
-# Display name for each entity type. Add as new emitters come online.
+# Display name for each entity type. Keys match the directory name
+# ``WikiPageDiff.entity_type`` returns (the second path component of
+# ``data/<category>/<id>.wiki.txt``). Each shared-Entry domain (movement,
+# creature_type, attack_archetype) gets its own top-level dir and its own
+# heading even though the rows store into the unified Cargo Entry table.
+# Add as new emitters come online.
 _ENTITY_HEADINGS: dict[str, str] = {
-    "Unit": "Units",
-    "Hero": "Heroes",
-    "Spell": "Spells",
-    "Item": "Items",
-    "Building": "Buildings",
-    "Faction": "Factions",
-    "FactionLaw": "Faction Laws",
-    "HeroSkill": "Hero Skills",
-    "HeroSpecialization": "Hero Specializations",
-    "Buff": "Buffs",
+    "units": "Units",
+    "factions": "Factions",
+    "attack_archetype": "Attack Archetypes",
+    "attack_passives": "Attack Passives",
+    "movement": "Movement",
+    "creature_type": "Creature Types",
+    "heroes": "Heroes",
+    "spells": "Spells",
+    "items": "Items",
+    "item_sets": "Item Sets",
+    "buildings": "Buildings",
+    "faction_laws": "Faction Laws",
+    "hero_skills": "Hero Skills",
+    "hero_specializations": "Hero Specializations",
+    "buffs": "Buffs",
 }
 
 
@@ -27,11 +37,12 @@ def _heading_for(entity_type: str) -> str:
 def _wiki_link(page: WikiPageDiff) -> str:
     """Render a wiki link to the data page.
 
-    The on-wiki page name strips the file extension and uses MediaWiki's
-    title casing (the bot stores ``Data:Unit/<id>``).
+    Uses ``WikiPageDiff.wiki_title`` for the link target (handles the
+    directory→table mapping centrally) and ``page_id`` for the display
+    text.
     """
-    et = page.entity_type or "Misc"
-    return f"[[Data:{et}/{page.page_id}|{page.page_id}]]"
+    title = page.wiki_title or f"Data:Misc/{page.page_id}"
+    return f"[[{title}|{page.page_id}]]"
 
 
 def render_patch_article(diff: WikiDiff, patch_label: str) -> str:

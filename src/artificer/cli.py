@@ -26,13 +26,15 @@ from rich.console import Console
 from rich.table import Table
 
 from artificer.emit import (
-    ATTACK_ARCHETYPE_SEEDS,
-    emit_attack_archetype_page,
     emit_attack_passive_page,
+    emit_entry_page_from_seed,
+    emit_faction_page,
     emit_unit_page,
+    iter_entry_seeds,
 )
 from artificer.extract import (
     CorePaths,
+    extract_factions,
     extract_units_enriched,
     load_localization_corpus,
 )
@@ -97,14 +99,22 @@ def cmd_extract(
                                             (includes the unit's
                                             {{UnitAttack | …}} invocation)
         data/units/<id>.json               source JSON copy
-        data/attacks/<attack_type>.wiki.txt shared Data:AttackArchetype/<melee|ranged|reach>
+        data/factions/<id>.wiki.txt        rendered Data:Faction/<id> page
+                                            ({{Faction}} + {{Translation}}
+                                             + 20 inline city-name Entry rows)
+        data/<type>/<subtype>.wiki.txt     shared Data:<PascalType>/<subtype>
+                                            (per-type top-level dirs:
+                                            attack_archetype/, movement/,
+                                            creature_type/, ...; rows live
+                                            in the unified Cargo Entry table)
         data/attack_passives/<id>.wiki.txt shared Data:AttackPassive/<id> seed
         audit.json                         logic-vs-views audit report
         _meta.json                         source patch path + timestamps
 
-    Currently emits Units plus the shared attack-archetype + attack-
-    passive seed data. Other categories will be added in place; no
-    further CLI changes required.
+    Currently emits Units, Factions (+ city-name Entry rows), shared
+    Entry seeds (attack archetypes, movement types, creature types),
+    and AttackPassive seeds. Other categories will be added in place;
+    no further CLI changes required.
     """
     from artificer.extract.loader import load_json
     from artificer.extract._pattern_passive_map import ATTACK_PASSIVES
@@ -113,11 +123,14 @@ def cmd_extract(
 
     final_label = label or patch.name
     target = out_root / final_label
-    unit_dir = target / "data" / "units"
-    attack_dir = target / "data" / "attacks"
-    attack_passive_dir = target / "data" / "attack_passives"
-    for d in (unit_dir, attack_dir, attack_passive_dir):
+    data_dir = target / "data"
+    unit_dir = data_dir / "units"
+    faction_dir = data_dir / "factions"
+    attack_passive_dir = data_dir / "attack_passives"
+    for d in (unit_dir, faction_dir, attack_passive_dir):
         d.mkdir(parents=True, exist_ok=True)
+    # Per-type Entry dirs (data/<type>/) get created lazily inside the
+    # entry loop below so the seed dict drives the directory layout.
 
     paths = CorePaths.from_root(patch)
 
@@ -160,12 +173,30 @@ def cmd_extract(
         if src.is_file():
             (unit_dir / f"{u.id}.json").write_bytes(src.read_bytes())
 
-    # Shared AttackArchetype seed pages (Data:AttackArchetype/<melee|ranged|reach>).
-    n_archetypes = 0
-    for attack_type in ATTACK_ARCHETYPE_SEEDS:
-        seed_page = emit_attack_archetype_page(attack_type, corpus, resolver=resolver)
-        (attack_dir / f"{attack_type}.wiki.txt").write_text(seed_page, encoding="utf-8")
-        n_archetypes += 1
+    # Factions (Data:Faction/<id>). Each page carries {{Faction}} +
+    # {{Translation | type=faction | …}} + 20 inline
+    # {{Entry | type=FactionCityName | …}} rows for the city-name
+    # pool. See D-025 / D-026.
+    factions = extract_factions(paths)
+    n_factions = 0
+    n_city_names = 0
+    for f in factions:
+        page = emit_faction_page(f, corpus, resolver=resolver)
+        (faction_dir / f"{f.id}.wiki.txt").write_text(page, encoding="utf-8")
+        n_factions += 1
+        n_city_names += len(f.city_names)
+        total_chars += len(page)
+
+    # Shared (hand-curated) Entry seed pages. Per-type top-level dirs
+    # (data/<type>/); wiki pages land at Data:<PascalType>/<subtype>.
+    # Cargo rows all write to the unified Entry table.
+    n_entries = 0
+    for entry_type, subtype in iter_entry_seeds():
+        type_dir = data_dir / entry_type
+        type_dir.mkdir(parents=True, exist_ok=True)
+        seed_page = emit_entry_page_from_seed(entry_type, subtype, corpus, resolver=resolver)
+        (type_dir / f"{subtype}.wiki.txt").write_text(seed_page, encoding="utf-8")
+        n_entries += 1
         total_chars += len(seed_page)
 
     # Shared AttackPassive seed pages (Data:AttackPassive/<passive_id>).
@@ -184,7 +215,8 @@ def cmd_extract(
     elapsed = time.monotonic() - t3
     console.print(
         f"[green]Wrote {len(result.units)} unit pages, "
-        f"{n_archetypes} attack-archetype seeds, {n_passives} attack-passive seeds[/green] "
+        f"{n_factions} faction pages, {n_city_names} city-name entries, "
+        f"{n_entries} curated entry seeds, {n_passives} attack-passive seeds[/green] "
         f"({total_chars:,} chars) in {elapsed:.1f}s -> {target}"
     )
 
@@ -312,7 +344,7 @@ def cmd_diff_patch(
         },
         "pages": [
             {
-                "title": f"Data:{p.entity_type}/{p.page_id}",
+                "title": p.wiki_title,
                 "relpath": p.relpath,
                 "status": p.status,
             }

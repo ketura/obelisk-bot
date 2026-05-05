@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Iterator
 
 from artificer.emit.cargo import block_hash, render_call
 from artificer.resolve import PlaceholderResolver, html_to_wiki
@@ -246,92 +246,269 @@ def _unit_attack_params(record: UnitAttack) -> dict[str, Any]:
 
 
 # ----------------------------------------------------------------------------
-# Shared AttackArchetype + AttackPassive seed-data emitters
+# Shared Entry seed-data emitter (unified reference table per D-024)
 # ----------------------------------------------------------------------------
 
-# Hand-curated seed for the 3-row AttackArchetype reference table.
-# Maps the bot's player-facing attack_type enum to the L10n SID family
-# that drives display_name / description.
-ATTACK_ARCHETYPE_SEEDS: dict[str, dict[str, Any]] = {
-    "melee": {
-        "name_sid": "base_passive_melee_attack_name",
-        "desc_sid": "base_passive_melee_attack_description",
-        "display_name_fallback": "Melee Attack",
+# Hand-curated seed for the unified Entry reference table. Top-level
+# keys are Entry `type` values; their values map `subtype` -> info dict
+# with the L10n SIDs that drive display_name/description plus an English
+# fallback. Optional `icon` field per entry. See D-024.
+ENTRY_SEEDS: dict[str, dict[str, dict[str, Any]]] = {
+    "attack_archetype": {
+        "melee": {
+            "name_sid": "base_passive_melee_attack_name",
+            "desc_sid": "base_passive_melee_attack_description",
+            "display_name_fallback": "Melee Attack",
+        },
+        "ranged": {
+            "name_sid": "base_passive_ranged_attack_name",
+            "desc_sid": "base_passive_ranged_attack_description",
+            "display_name_fallback": "Ranged Attack",
+        },
+        "reach": {
+            "name_sid": "base_passive_remote_attack_name",
+            "desc_sid": "base_passive_remote_attack_description",
+            "display_name_fallback": "Long Reach",
+        },
     },
-    "ranged": {
-        "name_sid": "base_passive_ranged_attack_name",
-        "desc_sid": "base_passive_ranged_attack_description",
-        "display_name_fallback": "Ranged Attack",
+    "movement": {
+        "fly": {
+            "name_sid": "base_passive_flyer_name",
+            "desc_sid": "base_passive_flyer_description",
+            "display_name_fallback": "Flying",
+        },
+        "teleport": {
+            "name_sid": "base_passive_blink_name",
+            "desc_sid": "base_passive_blink_description",
+            # Display-name flip: 'teleport' enum → "Blink" in-game.
+            "display_name_fallback": "Blink",
+        },
     },
-    "reach": {
-        "name_sid": "base_passive_remote_attack_name",
-        "desc_sid": "base_passive_remote_attack_description",
-        "display_name_fallback": "Long Reach",
+    "creature_type": {
+        "living": {
+            "name_sid": "base_class_living",
+            "desc_sid": "base_class_living_description",
+            "display_name_fallback": "Living",
+        },
+        "undead": {
+            "name_sid": "base_class_undead",
+            "desc_sid": "base_class_undead_description",
+            "display_name_fallback": "Undead",
+        },
+        "demon": {
+            "name_sid": "base_class_demon",
+            "desc_sid": "base_class_demon_description",
+            # Display-name flip: 'demon' enum → "Hive Spawn" in-game.
+            "display_name_fallback": "Hive Spawn",
+        },
+        "magic_creature": {
+            "name_sid": "base_class_magic_creature",
+            "desc_sid": "base_class_magic_creature_description",
+            "display_name_fallback": "Magic Creature",
+        },
+        "embodiment": {
+            "name_sid": "base_class_embodiment",
+            "desc_sid": "base_class_embodiment_description",
+            "display_name_fallback": "Embodiment",
+        },
+        "dragon": {
+            "name_sid": "base_class_dragon",
+            "desc_sid": "base_class_dragon_description",
+            "display_name_fallback": "Dragon",
+        },
+        "construct": {
+            "name_sid": "base_class_construct",
+            "desc_sid": "base_class_construct_description",
+            "display_name_fallback": "Construct",
+        },
     },
 }
 
 
-_ATTACK_ARCHETYPE_FIELD_ORDER: tuple[str, ...] = (
-    "attack_type", "display_name", "description", "name_sid", "desc_sid",
-)
+def _entry_field_order() -> tuple[str, ...]:
+    base = ("type", "subtype", "display_name", "description", "icon",
+            "name_sid", "desc_sid")
+    lang_pairs: list[str] = []
+    for lang_dir in _TRANSLATION_LANG_ORDER:
+        code = LANG_CODE[lang_dir]
+        lang_pairs.extend([f"{code}_name", f"{code}_desc"])
+    return base + tuple(lang_pairs)
 
 
-def emit_attack_archetype_page(
-    attack_type: str,
+_ENTRY_FIELD_ORDER: tuple[str, ...] = _entry_field_order()
+
+
+def _translation_field_order() -> tuple[str, ...]:
+    """Field order for ``{{Translation | …}}`` invocations.
+
+    Per D-026: type and target_id at the head, then the SID pair for
+    traceability, then 15 × (lang_name, lang_desc) pairs in
+    `_TRANSLATION_LANG_ORDER`.
+    """
+    base = ("type", "target_id", "name_sid", "desc_sid")
+    lang_pairs: list[str] = []
+    for lang_dir in _TRANSLATION_LANG_ORDER:
+        code = LANG_CODE[lang_dir]
+        lang_pairs.extend([f"{code}_name", f"{code}_desc"])
+    return base + tuple(lang_pairs)
+
+
+_TRANSLATION_FIELD_ORDER: tuple[str, ...] = _translation_field_order()
+
+
+def render_translation_block(
+    translation_type: str,
+    target_id: str,
+    name_sid: str | None,
+    desc_sid: str | None,
+    corpus: LocalizationCorpus,
+    *,
+    resolver: PlaceholderResolver | None = None,
+    unit_json: dict[str, Any] | None = None,
+    ability_json: dict[str, Any] | None = None,
+) -> str:
+    """Render a single ``{{Translation | …}}`` template invocation.
+
+    Returns the bare template call (no surrounding comment, no
+    trailing newline) — callers append it to a parent entity's page
+    after the entity's structural row. Either SID may be ``None``;
+    if both are missing, returns ``""`` (skip — caller filters).
+    ``unit_json`` / ``ability_json`` are forwarded to the resolver
+    for placeholder substitution context (used by unit and
+    unit-ability translations); pass ``None`` for everything else.
+    See D-026.
+    """
+    if not name_sid and not desc_sid:
+        return ""
+
+    params: dict[str, Any] = {
+        "type": translation_type,
+        "target_id": target_id,
+        "name_sid": name_sid,
+        "desc_sid": desc_sid,
+    }
+    for lang_dir in _TRANSLATION_LANG_ORDER:
+        code = LANG_CODE[lang_dir]
+        if name_sid:
+            params[f"{code}_name"] = _lookup_text(
+                name_sid, lang_dir, corpus, resolver, unit_json, ability_json
+            )
+        if desc_sid:
+            params[f"{code}_desc"] = _lookup_text(
+                desc_sid, lang_dir, corpus, resolver, unit_json, ability_json
+            )
+
+    return render_call("Translation", params, key_order=_TRANSLATION_FIELD_ORDER)
+
+
+def iter_entry_seeds() -> Iterator[tuple[str, str]]:
+    """Yield (type, subtype) pairs in canonical declaration order."""
+    for entry_type, subtypes in ENTRY_SEEDS.items():
+        for subtype in subtypes:
+            yield (entry_type, subtype)
+
+
+def render_entry_block(
+    entry_type: str,
+    subtype: str,
+    name_sid: str,
+    desc_sid: str | None,
+    corpus: LocalizationCorpus,
+    *,
+    display_name_fallback: str | None = None,
+    icon: str | None = None,
+    resolver: PlaceholderResolver | None = None,
+) -> str:
+    """Render a single ``{{Entry | …}}`` template invocation.
+
+    Returns just the bare template call (no surrounding comment, no
+    trailing newline). Use ``emit_entry_page`` when you want a complete
+    standalone wiki page; use this when you're embedding the row in
+    another emitter's output (e.g. faction pages embedding their city
+    rows). See D-024.
+    """
+    en_name = _lookup_text(name_sid, "english", corpus, resolver, None, None)
+    en_desc = (
+        _lookup_text(desc_sid, "english", corpus, resolver, None, None)
+        if desc_sid else None
+    )
+
+    params: dict[str, Any] = {
+        "type": entry_type,
+        "subtype": subtype,
+        "display_name": en_name or display_name_fallback,
+        "description": en_desc,
+        "icon": icon,
+        "name_sid": name_sid,
+        "desc_sid": desc_sid,
+    }
+    for lang_dir in _TRANSLATION_LANG_ORDER:
+        code = LANG_CODE[lang_dir]
+        params[f"{code}_name"] = _lookup_text(
+            name_sid, lang_dir, corpus, resolver, None, None
+        )
+        if desc_sid:
+            params[f"{code}_desc"] = _lookup_text(
+                desc_sid, lang_dir, corpus, resolver, None, None
+            )
+
+    return render_call("Entry", params, key_order=_ENTRY_FIELD_ORDER)
+
+
+def emit_entry_page(
+    entry_type: str,
+    subtype: str,
+    name_sid: str,
+    desc_sid: str | None,
+    corpus: LocalizationCorpus,
+    *,
+    display_name_fallback: str | None = None,
+    icon: str | None = None,
+    resolver: PlaceholderResolver | None = None,
+) -> str:
+    """Render a complete ``Data:<EntryType>/<subtype>`` page — the
+    bot-managed comment header plus one ``{{Entry | …}}`` call.
+
+    Callers pass the SIDs directly so this serves both hand-curated
+    seeds (via ``emit_entry_page_from_seed``) and per-patch extracted
+    Entry data. ``desc_sid`` may be ``None`` for entries that have
+    only a name — description columns are then sparse-emitted.
+    """
+    block = render_entry_block(
+        entry_type=entry_type,
+        subtype=subtype,
+        name_sid=name_sid,
+        desc_sid=desc_sid,
+        corpus=corpus,
+        display_name_fallback=display_name_fallback,
+        icon=icon,
+        resolver=resolver,
+    )
+    return (
+        "<!-- Bot-managed page. Edit the source in artificer-bot, not here. -->\n\n"
+        + block
+        + "\n"
+    )
+
+
+def emit_entry_page_from_seed(
+    entry_type: str,
+    subtype: str,
     corpus: LocalizationCorpus,
     resolver: PlaceholderResolver | None = None,
 ) -> str:
-    """Render ``Data:AttackArchetype/<attack_type>`` — the parent
-    {{AttackArchetype | …}} call plus its {{AttackArchetypeTranslation}}
-    sibling for the 15 non-English locales.
-    """
-    seed = ATTACK_ARCHETYPE_SEEDS[attack_type]
-    name_sid = seed["name_sid"]
-    desc_sid = seed["desc_sid"]
-
-    en_name = _lookup_text(name_sid, "english", corpus, resolver, None, None)
-    en_desc = _lookup_text(desc_sid, "english", corpus, resolver, None, None)
-
-    parent_params: dict[str, Any] = {
-        "attack_type": attack_type,
-        "display_name": en_name or seed["display_name_fallback"],
-        "description": en_desc,
-        "name_sid": name_sid,
-        "desc_sid": desc_sid,
-    }
-
-    translation_params: dict[str, Any] = {
-        "attack_type": attack_type,
-        "name_sid": name_sid,
-        "desc_sid": desc_sid,
-    }
-    for lang_dir in _TRANSLATION_LANG_ORDER:
-        code = LANG_CODE[lang_dir]
-        translation_params[f"{code}_name"] = _lookup_text(
-            name_sid, lang_dir, corpus, resolver, None, None
-        )
-        translation_params[f"{code}_desc"] = _lookup_text(
-            desc_sid, lang_dir, corpus, resolver, None, None
-        )
-    translation_key_order = ["attack_type", "name_sid", "desc_sid"]
-    for lang_dir in _TRANSLATION_LANG_ORDER:
-        code = LANG_CODE[lang_dir]
-        translation_key_order.extend([f"{code}_name", f"{code}_desc"])
-
-    blocks = [
-        "<!-- Bot-managed page. Edit the source in artificer-bot, not here. -->",
-        render_call(
-            "AttackArchetype",
-            parent_params,
-            key_order=_ATTACK_ARCHETYPE_FIELD_ORDER,
-        ),
-        render_call(
-            "AttackArchetypeTranslation",
-            translation_params,
-            key_order=translation_key_order,
-        ),
-    ]
-    return "\n\n".join(blocks) + "\n"
+    """Convenience wrapper: render a curated ``ENTRY_SEEDS`` entry."""
+    seed = ENTRY_SEEDS[entry_type][subtype]
+    return emit_entry_page(
+        entry_type=entry_type,
+        subtype=subtype,
+        name_sid=seed["name_sid"],
+        desc_sid=seed["desc_sid"],
+        corpus=corpus,
+        resolver=resolver,
+        display_name_fallback=seed.get("display_name_fallback"),
+        icon=seed.get("icon"),
+    )
 
 
 # ----------------------------------------------------------------------------
@@ -343,13 +520,6 @@ _ATTACK_PASSIVE_FIELD_ORDER: tuple[str, ...] = (
     "name_sid", "desc_sid", "display_name", "description",
 )
 
-_ATTACK_PASSIVE_TRANSLATION_FIELD_ORDER: tuple[str, ...] = (
-    "attack_passive_id", "name_sid", "desc_sid",
-    *(f"{LANG_CODE[d]}_name" if k == 0 else f"{LANG_CODE[d]}_desc"
-      for d in _TRANSLATION_LANG_ORDER for k in (0, 1)),
-)
-
-
 def emit_attack_passive_page(
     attack_passive_id: str,
     info: dict[str, Any],
@@ -357,8 +527,8 @@ def emit_attack_passive_page(
     resolver: PlaceholderResolver | None = None,
 ) -> str:
     """Render ``Data:AttackPassive/<attack_passive_id>`` — one
-    {{AttackPassive | …}} call (English defaults) plus one
-    {{AttackPassiveTranslation | …}} call (15 non-English locales).
+    ``{{AttackPassive | …}}`` call (English defaults) plus one
+    ``{{Translation | type=attack_passive | …}}`` row (per D-026).
     """
     name_sid = info.get("name_sid")
     desc_sid = info.get("desc_sid")
@@ -382,27 +552,6 @@ def emit_attack_passive_page(
         "description": en_desc,
     }
 
-    translation_params: dict[str, Any] = {
-        "attack_passive_id": attack_passive_id,
-        "name_sid": name_sid,
-        "desc_sid": desc_sid,
-    }
-    for lang_dir in _TRANSLATION_LANG_ORDER:
-        code = LANG_CODE[lang_dir]
-        if isinstance(name_sid, str):
-            translation_params[f"{code}_name"] = _lookup_text(
-                name_sid, lang_dir, corpus, resolver, None, None
-            )
-        if isinstance(desc_sid, str):
-            translation_params[f"{code}_desc"] = _lookup_text(
-                desc_sid, lang_dir, corpus, resolver, None, None
-            )
-
-    translation_key_order = ["attack_passive_id", "name_sid", "desc_sid"]
-    for lang_dir in _TRANSLATION_LANG_ORDER:
-        code = LANG_CODE[lang_dir]
-        translation_key_order.extend([f"{code}_name", f"{code}_desc"])
-
     blocks = [
         "<!-- Bot-managed page. Edit the source in artificer-bot, not here. -->",
         render_call(
@@ -410,12 +559,17 @@ def emit_attack_passive_page(
             parent_params,
             key_order=_ATTACK_PASSIVE_FIELD_ORDER,
         ),
-        render_call(
-            "AttackPassiveTranslation",
-            translation_params,
-            key_order=translation_key_order,
-        ),
     ]
+    xlat = render_translation_block(
+        translation_type="attack_passive",
+        target_id=attack_passive_id,
+        name_sid=name_sid if isinstance(name_sid, str) else None,
+        desc_sid=desc_sid if isinstance(desc_sid, str) else None,
+        corpus=corpus,
+        resolver=resolver,
+    )
+    if xlat:
+        blocks.append(xlat)
     return "\n\n".join(blocks) + "\n"
 
 
@@ -469,9 +623,13 @@ def emit_unit_page(
             )
         )
 
-    blocks.append(_render_unit_translation(unit, corpus, resolver, unit_json))
+    unit_xlat = _render_unit_translation(unit, corpus, resolver, unit_json)
+    if unit_xlat:
+        blocks.append(unit_xlat)
     for ability in unit.unit_abilities:
-        blocks.append(_render_ability_translation(unit.id, ability, corpus, resolver, unit_json))
+        ab_xlat = _render_ability_translation(unit.id, ability, corpus, resolver, unit_json)
+        if ab_xlat:
+            blocks.append(ab_xlat)
 
     return "\n\n".join(blocks) + "\n"
 
@@ -517,48 +675,40 @@ def _render_unit_translation(
     unit: Unit, corpus: LocalizationCorpus,
     resolver: PlaceholderResolver | None = None, unit_json: dict[str, Any] | None = None,
 ) -> str:
-    params: dict[str, Any] = {
-        "unit_id": unit.id,
-        "name_sid": unit.name_sid,
-        "desc_sid": unit.narrative_description_sid,
-    }
-    for lang_dir in _TRANSLATION_LANG_ORDER:
-        code = LANG_CODE[lang_dir]
-        params[f"{code}_name"] = _lookup_text(unit.name_sid, lang_dir, corpus, resolver, unit_json)
-        if unit.narrative_description_sid:
-            params[f"{code}_desc"] = _lookup_text(unit.narrative_description_sid, lang_dir, corpus, resolver, unit_json)
-    key_order = ["unit_id", "name_sid", "desc_sid"]
-    for lang_dir in _TRANSLATION_LANG_ORDER:
-        code = LANG_CODE[lang_dir]
-        key_order.extend([f"{code}_name", f"{code}_desc"])
-    return render_call("UnitTranslation", params, key_order=key_order)
+    """Per D-026: emit unified ``{{Translation | type=unit | …}}``."""
+    return render_translation_block(
+        translation_type="unit",
+        target_id=unit.id,
+        name_sid=unit.name_sid,
+        desc_sid=unit.narrative_description_sid,
+        corpus=corpus,
+        resolver=resolver,
+        unit_json=unit_json,
+    )
 
 
 def _render_ability_translation(
     unit_id: str, ability: UnitAbility, corpus: LocalizationCorpus,
     resolver: PlaceholderResolver | None = None, unit_json: dict[str, Any] | None = None,
 ) -> str:
-    params: dict[str, Any] = {
-        "ability_id": make_ability_id(unit_id, ability.ability_type, ability.ordinal, ability.variant),
-        "unit_id": unit_id,
-        "ability_type": ability.ability_type,
-        "ordinal": ability.ordinal,
-        "variant": ability.variant,
-        "name_sid": ability.name_sid,
-        "desc_sid": ability.desc_sid,
-    }
-    aj = _ability_json_for(ability, unit_json)
-    for lang_dir in _TRANSLATION_LANG_ORDER:
-        code = LANG_CODE[lang_dir]
-        if ability.name_sid:
-            params[f"{code}_name"] = _lookup_text(ability.name_sid, lang_dir, corpus, resolver, unit_json, aj)
-        if ability.desc_sid:
-            params[f"{code}_desc"] = _lookup_text(ability.desc_sid, lang_dir, corpus, resolver, unit_json, aj)
-    key_order = ["ability_id", "unit_id", "ability_type", "ordinal", "variant", "name_sid", "desc_sid"]
-    for lang_dir in _TRANSLATION_LANG_ORDER:
-        code = LANG_CODE[lang_dir]
-        key_order.extend([f"{code}_name", f"{code}_desc"])
-    return render_call("UnitAbilityTranslation", params, key_order=key_order)
+    """Per D-026: emit unified ``{{Translation | type=unit_ability | …}}``.
+
+    The composite ability_id stays the join key. Filter columns
+    (unit_id, ability_type, ordinal, variant) previously inlined here
+    are dropped — display layer joins ``UnitAbility`` for those when
+    needed. Returns ``""`` if the ability has neither name nor desc
+    SIDs to translate; the caller filters empties before joining.
+    """
+    return render_translation_block(
+        translation_type="unit_ability",
+        target_id=make_ability_id(unit_id, ability.ability_type, ability.ordinal, ability.variant),
+        name_sid=ability.name_sid,
+        desc_sid=ability.desc_sid,
+        corpus=corpus,
+        resolver=resolver,
+        unit_json=unit_json,
+        ability_json=_ability_json_for(ability, unit_json),
+    )
 
 
 def _unit_params(

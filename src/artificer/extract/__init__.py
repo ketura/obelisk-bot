@@ -1,5 +1,6 @@
 """Extraction layer — read source JSON, produce canonical pydantic records."""
 
+from artificer.extract.faction import extract_factions
 from artificer.extract.loader import (
     CorePaths,
     iter_array,
@@ -19,6 +20,7 @@ __all__ = [
     "OwnershipClaims",
     "UnitExtractionResult",
     "assign_ownership",
+    "extract_factions",
     "extract_units",
     "extract_units_enriched",
     "iter_array",

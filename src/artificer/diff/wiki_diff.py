@@ -19,6 +19,25 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 
+# Maps the on-disk category directory under data/ to the actual wiki-side
+# page-namespace name. The on-disk side uses snake_case (lowercase plural
+# for collections, singular for shared-Entry domains) while the wiki side
+# uses PascalCase (singular for Entry-domain pages, singular for Unit).
+# Note: shared-Entry domains all *store* into the unified Cargo `Entry`
+# table even though their pages live under per-domain namespaces
+# (Data:Movement/<subtype>, Data:CreatureType/<subtype>, ...) — this map
+# governs the page-name namespace, not the underlying Cargo table.
+# Update when a new top-level data category comes online.
+_DIR_TO_WIKI_TABLE: dict[str, str] = {
+    "units": "Unit",
+    "attack_passives": "AttackPassive",
+    "factions": "Faction",
+    "attack_archetype": "AttackArchetype",
+    "movement": "Movement",
+    "creature_type": "CreatureType",
+}
+
+
 @dataclass(frozen=True)
 class WikiPageDiff:
     """One page's status between old and new emit dirs."""
@@ -69,11 +88,12 @@ class WikiPageDiff:
 
     @property
     def entity_type(self) -> str:
-        """Derive the entity category from the path.
+        """Derive the entity category (top-level data dir) from the path.
 
         ``data/units/foo.wiki.txt``           -> ``units``
-        ``data/attacks/foo.wiki.txt``         -> ``attacks``
         ``data/attack_passives/foo.wiki.txt`` -> ``attack_passives``
+        ``data/movement/fly.wiki.txt``        -> ``movement``
+        ``data/creature_type/undead.wiki.txt``-> ``creature_type``
         Otherwise: empty string.
         """
         parts = Path(self.relpath).parts
@@ -86,8 +106,24 @@ class WikiPageDiff:
         """The wiki page id without the ``.wiki.txt`` suffix.
 
         ``Data/Unit/crossbowman.wiki.txt`` -> ``crossbowman``
+        ``data/movement/fly.wiki.txt``     -> ``fly``
         """
         return Path(self.relpath).stem.replace(".wiki", "")
+
+    @property
+    def wiki_title(self) -> str:
+        """The full on-wiki page title, e.g. ``Data:Unit/crossbowman`` or
+        ``Data:Entry/movement/fly``.
+
+        Joins the wiki-side table name (looked up from the on-disk
+        directory) with the page id. The directory→table mapping lives
+        in ``_DIR_TO_WIKI_TABLE`` at module top.
+        """
+        parts = Path(self.relpath).parts
+        if len(parts) < 2 or parts[0] not in ("data", "Data"):
+            return ""
+        table = _DIR_TO_WIKI_TABLE.get(parts[1], parts[1])
+        return f"Data:{table}/{self.page_id}"
 
 
 @dataclass
