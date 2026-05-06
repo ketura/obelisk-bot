@@ -206,6 +206,8 @@ def extract_units_enriched(paths: CorePaths) -> UnitExtractionResult:
                         variant=None,
                         name_sid=name_sid,
                         desc_sid=desc_sid if isinstance(desc_sid, str) else None,
+                        source_array=source_key,
+                        source_index=source_idx,
                         **extra_fields,
                     )
                 )

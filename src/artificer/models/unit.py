@@ -63,6 +63,15 @@ class UnitAbility(BaseModel):
     name_sid: Sid
     desc_sid: Sid | None = None
 
+    # Source-array provenance, populated at extract time so the emit
+    # placeholder resolver can read the right ability_json entry. The
+    # ordinal alone is insufficient when alternativeAttacks consume
+    # ordinals before the regular abilities[] list (e.g. black_dragon's
+    # Fighting Style alt-attack takes ordinal 1, leaving Inner Flame at
+    # ordinal 2 even though it lives at logic.abilities[0]).
+    source_array: str | None = None
+    source_index: int | None = None
+
     affected_stat: str | None = None
     affected_stat_amount: float | None = None
 

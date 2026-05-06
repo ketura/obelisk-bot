@@ -26,15 +26,28 @@ from rich.console import Console
 from rich.table import Table
 
 from artificer.emit import (
+    emit_artifact_page,
     emit_attack_passive_page,
     emit_entry_page_from_seed,
     emit_faction_page,
+    emit_hero_class_page,
+    emit_hero_page,
+    emit_hero_specialization_page,
+    emit_hero_sub_class_page,
+    emit_item_set_page,
+    emit_spell_page,
     emit_unit_page,
     iter_entry_seeds,
 )
 from artificer.extract import (
     CorePaths,
+    extract_artifacts,
     extract_factions,
+    extract_hero_specializations,
+    extract_hero_sub_classes,
+    extract_heroes,
+    extract_item_sets,
+    extract_spells,
     extract_units_enriched,
     load_localization_corpus,
 )
@@ -102,6 +115,11 @@ def cmd_extract(
         data/factions/<id>.wiki.txt        rendered Data:Faction/<id> page
                                             ({{Faction}} + {{Translation}}
                                              + 20 inline city-name Entry rows)
+        data/hero_classes/<id>.wiki.txt    rendered Data:HeroClass/<id> page
+                                            (12 derived class records)
+        data/heroes/<id>.wiki.txt          rendered Data:Hero/<id> page
+                                            ({{Hero}} + 2 {{Translation}} rows
+                                             + N HeroStart{Squad,Skill,Magic} rows)
         data/<type>/<subtype>.wiki.txt     shared Data:<PascalType>/<subtype>
                                             (per-type top-level dirs:
                                             attack_archetype/, movement/,
@@ -126,8 +144,17 @@ def cmd_extract(
     data_dir = target / "data"
     unit_dir = data_dir / "units"
     faction_dir = data_dir / "factions"
+    hero_class_dir = data_dir / "hero_classes"
+    hero_dir = data_dir / "heroes"
+    hero_spec_dir = data_dir / "hero_specializations"
+    hero_sub_class_dir = data_dir / "hero_sub_classes"
+    spell_dir = data_dir / "spells"
+    artifact_dir = data_dir / "artifacts"
+    item_set_dir = data_dir / "item_sets"
     attack_passive_dir = data_dir / "attack_passives"
-    for d in (unit_dir, faction_dir, attack_passive_dir):
+    for d in (unit_dir, faction_dir, hero_class_dir, hero_dir, hero_spec_dir,
+              hero_sub_class_dir, spell_dir, artifact_dir, item_set_dir,
+              attack_passive_dir):
         d.mkdir(parents=True, exist_ok=True)
     # Per-type Entry dirs (data/<type>/) get created lazily inside the
     # entry loop below so the seed dict drives the directory layout.
@@ -187,6 +214,90 @@ def cmd_extract(
         n_city_names += len(f.city_names)
         total_chars += len(page)
 
+    # Heroes + HeroClasses. 12 derived class records + ~177 per-hero
+    # records. Hero rows sparse-emit fields that match the class
+    # default (faction heroes uniformly inherit; campaign/tutorial
+    # routinely override stats/start_level/atb). See D-027.
+    hero_result = extract_heroes(paths)
+    n_hero_classes = 0
+    for hc in hero_result.hero_classes:
+        page = emit_hero_class_page(hc, corpus, resolver=resolver)
+        (hero_class_dir / f"{hc.id}.wiki.txt").write_text(page, encoding="utf-8")
+        n_hero_classes += 1
+        total_chars += len(page)
+    n_heroes = 0
+    for h in hero_result.heroes:
+        page = emit_hero_page(h, corpus, resolver=resolver)
+        (hero_dir / f"{h.id}.wiki.txt").write_text(page, encoding="utf-8")
+        n_heroes += 1
+        total_chars += len(page)
+
+    # Hero specializations (Data:HeroSpecialization/<id>). 126 records,
+    # each with N inline {{HeroSpecializationBonus}} rows. See D-028.
+    spec_result = extract_hero_specializations(paths)
+    n_hero_specs = 0
+    n_spec_bonuses = 0
+    for spec in spec_result.specializations:
+        page = emit_hero_specialization_page(spec, corpus, resolver=resolver)
+        (hero_spec_dir / f"{spec.id}.wiki.txt").write_text(page, encoding="utf-8")
+        n_hero_specs += 1
+        n_spec_bonuses += len(spec.bonuses)
+        total_chars += len(page)
+
+    # Hero sub-classes (Data:HeroSubClass/<id>). 24 prestige classes,
+    # 4 per faction × 6. Each carries 5 inline activation thresholds
+    # plus N {{HeroSubClassBonus}} rows. See D-029.
+    sub_class_result = extract_hero_sub_classes(paths)
+    n_hero_sub_classes = 0
+    n_sub_class_bonuses = 0
+    for sub in sub_class_result.sub_classes:
+        page = emit_hero_sub_class_page(sub, corpus, resolver=resolver)
+        (hero_sub_class_dir / f"{sub.id}.wiki.txt").write_text(page, encoding="utf-8")
+        n_hero_sub_classes += 1
+        n_sub_class_bonuses += len(sub.bonuses)
+        total_chars += len(page)
+
+    # Spells (Data:Spell/<id>). 137 records (battle + world + special +
+    # test). Each carries 4 inline {{SpellRank}} rows. SP-dependent
+    # placeholders intentionally remain unsubstituted. See D-030.
+    spell_result = extract_spells(paths)
+    n_spells = 0
+    n_spell_ranks = 0
+    for sp in spell_result.spells:
+        page = emit_spell_page(sp, corpus, resolver=resolver)
+        (spell_dir / f"{sp.id}.wiki.txt").write_text(page, encoding="utf-8")
+        n_spells += 1
+        n_spell_ranks += len(sp.ranks)
+        total_chars += len(page)
+
+    # Artifacts (Data:Artifact/<id>). 304 records across 13 source
+    # slot files. Each carries N inline {{Bonus | parent_type=artifact
+    # | …}} rows. Artifact sets deferred. See D-031.
+    artifact_result = extract_artifacts(paths)
+    n_artifacts = 0
+    n_artifact_bonuses = 0
+    for art in artifact_result.artifacts:
+        page = emit_artifact_page(art, corpus, resolver=resolver)
+        (artifact_dir / f"{art.id}.wiki.txt").write_text(page, encoding="utf-8")
+        n_artifacts += 1
+        n_artifact_bonuses += len(art.bonuses)
+        total_chars += len(page)
+
+    # Item sets (Data:ItemSet/<id>). 24 records, each with 1-3 tiers.
+    # Per-tier bonuses flow into the unified Bonus table with
+    # parent_type='item_set_tier'. See D-032.
+    item_set_result = extract_item_sets(paths)
+    n_item_sets = 0
+    n_item_set_tiers = 0
+    n_item_set_bonuses = 0
+    for st in item_set_result.item_sets:
+        page = emit_item_set_page(st, corpus, resolver=resolver)
+        (item_set_dir / f"{st.id}.wiki.txt").write_text(page, encoding="utf-8")
+        n_item_sets += 1
+        n_item_set_tiers += len(st.tiers)
+        n_item_set_bonuses += sum(len(t.bonuses) for t in st.tiers)
+        total_chars += len(page)
+
     # Shared (hand-curated) Entry seed pages. Per-type top-level dirs
     # (data/<type>/); wiki pages land at Data:<PascalType>/<subtype>.
     # Cargo rows all write to the unified Entry table.
@@ -215,7 +326,13 @@ def cmd_extract(
     elapsed = time.monotonic() - t3
     console.print(
         f"[green]Wrote {len(result.units)} unit pages, "
-        f"{n_factions} faction pages, {n_city_names} city-name entries, "
+        f"{n_factions} faction pages ({n_city_names} city-name entries), "
+        f"{n_hero_classes} hero classes, {n_heroes} heroes, "
+        f"{n_hero_specs} hero specializations ({n_spec_bonuses} bonus rows), "
+        f"{n_hero_sub_classes} hero sub-classes ({n_sub_class_bonuses} bonus rows), "
+        f"{n_spells} spells ({n_spell_ranks} rank rows), "
+        f"{n_artifacts} artifacts ({n_artifact_bonuses} bonus rows), "
+        f"{n_item_sets} item sets ({n_item_set_tiers} tiers, {n_item_set_bonuses} bonus rows), "
         f"{n_entries} curated entry seeds, {n_passives} attack-passive seeds[/green] "
         f"({total_chars:,} chars) in {elapsed:.1f}s -> {target}"
     )

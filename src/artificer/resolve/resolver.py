@@ -26,6 +26,7 @@ from artificer.resolve.interpreter import Interpreter
 from artificer.resolve.obstacles import ObstacleIndex, load_obstacle_index
 from artificer.resolve.scripts import ScriptRegistry
 from artificer.resolve.side_buffs import SideBuffIndex, load_side_buff_index
+from artificer.resolve.traps import TrapIndex, load_trap_index
 from artificer.resolve.wikitext import html_to_wiki
 
 _PLACEHOLDER_RE = re.compile(r"\{(\d+)\}")
@@ -49,10 +50,17 @@ class PlaceholderResolver:
         unit_json: dict[str, Any] | None,
         lang: str = "english",
         ability_json: dict[str, Any] | None = None,
+        spec_json: dict[str, Any] | None = None,
+        magic_json: dict[str, Any] | None = None,
+        set_json: dict[str, Any] | None = None,
+        artifact_json: dict[str, Any] | None = None,
     ) -> str:
         if not text:
             return text or ""
-        return self._resolve_inner(sid, text, unit_json, lang, ability_json, _seen=set())
+        return self._resolve_inner(
+            sid, text, unit_json, lang, ability_json, spec_json, magic_json,
+            set_json, artifact_json, _seen=set(),
+        )
 
     def _resolve_inner(
         self,
@@ -61,14 +69,28 @@ class PlaceholderResolver:
         unit_json: dict[str, Any] | None,
         lang: str,
         ability_json: dict[str, Any] | None,
+        spec_json: dict[str, Any] | None,
+        magic_json: dict[str, Any] | None,
+        set_json: dict[str, Any] | None,
+        artifact_json: dict[str, Any] | None,
         _seen: set[str],
     ) -> str:
         args = self.args_index.get(sid)
         if not args:
             return html_to_wiki(text)
 
-        ctx = {"unit_json": unit_json or {}, "ability_json": ability_json or {}}
-        values = self._evaluate_args(args, ctx, unit_json, lang, ability_json, _seen)
+        ctx = {
+            "unit_json": unit_json or {},
+            "ability_json": ability_json or {},
+            "spec_json": spec_json or {},
+            "magic_json": magic_json or {},
+            "set_json": set_json or {},
+            "artifact_json": artifact_json or {},
+        }
+        values = self._evaluate_args(
+            args, ctx, unit_json, lang, ability_json, spec_json, magic_json,
+            set_json, artifact_json, _seen,
+        )
 
         def sub(match: re.Match[str]) -> str:
             i = int(match.group(1))
@@ -86,12 +108,17 @@ class PlaceholderResolver:
         unit_json: dict[str, Any] | None,
         lang: str,
         ability_json: dict[str, Any] | None,
+        spec_json: dict[str, Any] | None,
+        magic_json: dict[str, Any] | None,
+        set_json: dict[str, Any] | None,
+        artifact_json: dict[str, Any] | None,
         _seen: set[str],
     ) -> list[str | None]:
         values: list[str | None] = []
         for arg_name in args:
             values.append(
-                self._eval_expr(arg_name, ctx, unit_json, lang, ability_json, _seen)
+                self._eval_expr(arg_name, ctx, unit_json, lang, ability_json,
+                                spec_json, magic_json, set_json, artifact_json, _seen)
             )
         return values
 
@@ -102,6 +129,10 @@ class PlaceholderResolver:
         unit_json: dict[str, Any] | None,
         lang: str,
         ability_json: dict[str, Any] | None,
+        spec_json: dict[str, Any] | None,
+        magic_json: dict[str, Any] | None,
+        set_json: dict[str, Any] | None,
+        artifact_json: dict[str, Any] | None,
         _seen: set[str],
     ) -> str | None:
         """Evaluate one args-side expression.
@@ -129,17 +160,11 @@ class PlaceholderResolver:
             left_expr, _pipe, alt_sid = expr.partition("|")
             alt_sid = alt_sid.strip()
             left_val = self._eval_expr(
-                left_expr, ctx, unit_json, lang, ability_json, _seen
+                left_expr, ctx, unit_json, lang, ability_json,
+                spec_json, magic_json, set_json, artifact_json, _seen
             )
             if self.corpus is None:
                 return left_val
-            # Look up the alt template's text. Fall back to english when the
-            # target language doesn't have the alt SID — Unfrozen sometimes
-            # ships new alt SIDs that are only translated into english (and
-            # often russian) initially. The numbers we splice in are
-            # language-neutral, so an english bracket form embedded in
-            # otherwise translated outer text is the cleanest available
-            # output until upstream catches up.
             alt_text = self.corpus.get(alt_sid, lang)
             alt_lang = lang
             if not alt_text and lang != "english":
@@ -161,11 +186,9 @@ class PlaceholderResolver:
                 k = j - 1 if use_left_for_zero else j
                 if k >= len(alt_args):
                     continue
-                # Evaluate alt-args in the same language we resolved the
-                # alt template in — keeps numeric formatting consistent
-                # with whichever copy of the alt we're actually rendering.
                 sub_map[j] = self._eval_expr(
-                    alt_args[k], ctx, unit_json, alt_lang, ability_json, sub_seen
+                    alt_args[k], ctx, unit_json, alt_lang, ability_json,
+                    spec_json, magic_json, set_json, artifact_json, sub_seen
                 )
 
             def _sub(m: re.Match[str]) -> str:
@@ -175,16 +198,15 @@ class PlaceholderResolver:
 
             return _PLACEHOLDER_RE.sub(_sub, alt_text)
 
-        # Direct function lookup
         v = self.interpreter.evaluate(expr, ctx)
         if v is not None:
             return v
-        # Aux SID lookup (recurse)
         if self.corpus is not None and expr not in _seen:
             sub_text = self.corpus.get(expr, lang)
             if sub_text is not None:
                 return self._resolve_inner(
-                    expr, sub_text, unit_json, lang, ability_json, _seen | {expr}
+                    expr, sub_text, unit_json, lang, ability_json,
+                    spec_json, magic_json, set_json, artifact_json, _seen | {expr}
                 )
         return None
 
@@ -211,8 +233,12 @@ def build_resolver(
     buffs = load_buff_index(core_root / "DB" / "buffs")
     obstacles = load_obstacle_index(core_root / "DB" / "field_objects" / "obstacles")
     side_buffs = load_side_buff_index(core_root / "DB" / "side_buffs")
+    traps = load_trap_index(core_root / "DB" / "field_objects" / "traps")
     return PlaceholderResolver(
         args,
-        Interpreter(registry, buffs=buffs, obstacles=obstacles, side_buffs=side_buffs),
+        Interpreter(
+            registry, buffs=buffs, obstacles=obstacles,
+            side_buffs=side_buffs, traps=traps,
+        ),
         corpus=corpus,
     )

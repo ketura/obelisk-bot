@@ -888,6 +888,537 @@ schema drift this consolidation exists to prevent.
   quo with growing surface area as new entities come online — the
   D-024 lesson rerunning.
 
+## D-027 — Hero + HeroClass with class-default override semantics
+
+**Date:** 2026-05-04
+**Status:** Locked.
+
+Heroes carry a player-facing identity (name, motto, description,
+specialization, starting army/skills/spells) on top of a class
+template (Knight / Cleric / Death Knight / etc.). Empirically the
+12 (faction × `might`/`magic`) classes are *implicit* in the source —
+no `DB/heroes_classes/` file exists — but every faction hero of a
+given class shares 11 fields' values exactly. Devs almost certainly
+designed each class then copy-pasted the template into per-hero
+records and customized only the deltas.
+
+**Resolution:** introduce two paired tables.
+
+`HeroClass` (12 rows, derived) carries the class defaults: faction,
+class_type, name (e.g. "Herald"), mesh, mount, native_biome,
+skills_roll_variant, cost_gold, start_level, attacks_times_before,
+the 12 stat columns, and the 8 stat-roll columns. The class id is
+`<class_type>_<faction>` (matches the L10n SID convention —
+`magic_demon` → "Herald"). Description SID is shared per
+classType: `might_desc` / `magic_desc`.
+
+`Hero` (one row per hero, ~177 in the 2026-05-03 corpus) carries
+the per-hero identity plus class-default fields encoded as **sparse
+overrides**. When the hero's value matches the class default, the
+column is omitted from the Hero row; the wiki-side join falls
+through to HeroClass via `COALESCE(Hero.<col>, HeroClass.<col>)`.
+
+Empirically:
+- **Faction heroes (108):** zero overrides. Every one of the 11
+  class-shared columns is omitted from the Hero row — every query
+  inherits from HeroClass.
+- **Campaign heroes (46):** universally override `stats`,
+  `start_level`, and `attacks_times_before`. Some additionally
+  override `mesh`, `mount`, or `skills_roll_variant`.
+- **Tutorial heroes (21):** universally override `stats` and
+  `attacks_times_before`. Most override `start_level`.
+
+**Cluster discovery:** `HeroClass` defaults are derived at extract
+time by taking the first faction hero in each (faction, classType)
+cell. The 11-field signature is invariant within each cell across
+the 108 faction heroes — no within-cell deviations exist in the
+2026-05-03 corpus, so first-hero is sufficient. (If a future patch
+ships within-cell drift, the bot would need to either pick a
+canonical hero or surface the conflict in the audit.)
+
+**Page layout:**
+- `Data:HeroClass/<class_id>` — `{{HeroClass}}` row + `{{Translation
+  type=hero_class}}` row. 12 pages total.
+- `Data:Hero/<hero_id>` — `{{Hero}}` row (sparse), two `{{Translation}}`
+  rows (`type=hero` for name+desc, `type=hero_motto` for the motto SID),
+  plus N side-table rows (HeroStartSquad, HeroStartSkill,
+  HeroStartMagic). ~177 pages total.
+
+**Why two Translation rows for one hero:** the hero record has three
+localizable fields (name, motto, description) but the `Translation`
+table per D-026 has slots for one (name, desc) pair. Adding `motto`
+columns would specialize the schema for heroes; emitting a second
+`Translation` row with `type=hero_motto` reuses the unified table
+cleanly. One extra row per hero is negligible.
+
+**List-shaped per-hero data:**
+- `startSquad` + `startSquadAlt` → `HeroStartSquad` side table with a
+  `variant` discriminator (`primary` / `alt`). Squad min/max ranges
+  are preserved (they define the random count at battle start).
+- `startSkills` → two parallel inline list columns on Hero:
+  `start_skills` (List of skill SIDs) and `start_skill_levels` (List
+  of Integers). The Nth element of `start_skill_levels` is the level
+  for the Nth SID — empirically mostly 1, but 8/208 entries are
+  level 2 so the level data is preserved. Originally proposed as a
+  `HeroStartSkill` side table, then collapsed to a single SID-only
+  list, then expanded to parallel SID + level lists once the level
+  variation came back into scope.
+- `startMagics` → `Hero.start_magics` inline column, same shape.
+  Level + isLearned dropped (constant `1` / `True` in the 2026-05-03
+  corpus).
+
+The `start*` lists are *not* promoted to HeroClass defaults despite
+~8/9 within-cell sharing — list-shape "match = omit" semantics is
+awkward to express, and per-hero is the simpler invariant.
+
+**Folder name → faction id drift:** source uses `humans/`, `necros/`,
+`demons/` (plural / archaic) but the JSON `fraction` field uses the
+singular `human`, `undead`, `demon`. The bot reads the JSON's
+`fraction` field directly; folder names are ignored except for
+discovery.
+
+**Naming normalization:**
+- `iconFractionLaws` → `icon_faction_laws`
+- `costGold` → `cost_gold`
+- `stats.moral` → `morale` (source typo; reused elsewhere in the
+  bot — see D-018-era discussion of `fraction` → `faction`).
+- `attacksTimesBefore` → `attacks_times_before` (kept as-is — the
+  source name is non-obvious but stable).
+
+**Code shape:**
+- `models/hero.py` — `HeroClassRecord`, `HeroRecord`,
+  `HeroStartSquadSlot`, `HeroStartSkill`, `HeroStartMagic`,
+  `HeroStats`, `HeroStatsRolls`, `HeroExtractionResult`.
+- `extract/hero.py` — `extract_heroes(paths)` does the two-pass
+  walk: first pass gathers faction-hero raws to derive class
+  defaults; second pass builds every HeroRecord with sparse override
+  fields against its class.
+- `emit/hero.py` — `emit_hero_class_page` and `emit_hero_page`.
+
+**Deferred:**
+- `HeroSpecialization` (135 rows) — a separate table; one
+  specialization per hero, points back via `Hero.specialization_id`.
+  Schema lands in a follow-up.
+- `HeroSubClass` (24 prestige classes per the player-facing
+  unlocks: Swashbuckler, Paragon, Grand Inquisitor, etc.) — also
+  follow-up.
+
+## D-028 — HeroSpecialization with structured bonus side table
+
+**Date:** 2026-05-04
+**Status:** PARTIALLY SUPERSEDED by D-031. The `HeroSpecialization`
+table itself is unchanged. The `HeroSpecializationBonus` side table
+collapsed into the unified `Bonus` table — same fields, plus a
+`parent_type='hero_specialization'` discriminator.
+
+Hero specializations are the per-hero unique passive — what makes
+Pauper a "Flea Bites" hero vs Pip a "Wish to Learn" hero. Each
+spec has a name, description, icon, and a list of structured
+`bonuses[]` effects. 126 specs in the 2026-05-03 corpus (108
+faction + 9 campaign + 5 tutorial + 4 test); 1367 total bonus rows.
+
+**Top-level fields (uniform across all 126 specs):** `id`, `name`
+(SID), `desc` (SID), `icon`, `bonuses[]`.
+
+**Bonus shape:** each `bonuses[]` entry has `type` + `parameters`
+(always present), plus optional `activationLevel`, `upgrade`,
+`receivers`, `battleType`, `receiverRole`, `receiverAllegiance`.
+12 distinct `type` values (heroStat, unitStat, heroBattleAbility,
+battleSubskillBonus, heroMagicReplace, cityUnitsIncrement,
+upgradeUnitsBonus, sideRes, heroStatBattle, unitBoolStat,
+learnMagicRemoteFromMagicGuild, cityUnitsIncrementPer).
+
+**Resolution:** two paired tables.
+
+`HeroSpecialization` (126 rows) carries identity + Translation join.
+`HeroSpecializationBonus` (~1367 rows) is a side table keyed on
+`(spec_id, ordinal)` carrying each bonus row.
+
+**`parameters` stored as `List (,) of String`.** Each bonus type has
+its own parameter shape (e.g. `heroStat` is `[stat, value]`,
+`heroMagicReplace` is `[from_spell, to_spell]`); the bot does no
+interpretation. Wiki display layer parses by `type`. Same encoding
+strategy as `Unit.shared_abilities` and `Hero.start_skills` — flat
+strings now, structure later if a real wiki need surfaces.
+
+**Considered and rejected:**
+- **Per-type typed columns** (e.g. `stat_name + stat_value` for
+  heroStat, `ability_id + ability_version` for heroBattleAbility).
+  Schema bloat: 12 types × 1-3 columns each, with most columns
+  always null. Cargo doesn't gain anything from typed columns
+  here — `parameters` is opaque to filtering anyway since the
+  meaning isn't lookable up by SQL.
+- **Single JSON-string blob.** Compact but Cargo can't index into
+  it. List columns at least let `HOLDS` queries work.
+
+**Forward-only join** (no `hero_id` back-reference on
+HeroSpecialization). `Hero.specialization_id = HeroSpecialization.id`
+suffices for both directions; reverse queries ("which hero has this
+spec") use the same join the other way. Saves one column.
+
+**Page layout:** `Data:HeroSpecialization/<id>` carries the
+`{{HeroSpecialization}}` row, the `{{Translation |
+type=hero_specialization | …}}` row, and N inline
+`{{HeroSpecializationBonus}}` rows in source order. No individual
+`Data:HeroSpecializationBonus/…` pages.
+
+**Code shape:** `extract_hero_specializations(paths)` walks
+`DB/heroes_specializations/*.json`. `emit_hero_specialization_page`
+renders the three-block page. CLI loops over the result.
+
+**Scope:** all 126 specs (faction + campaign + tutorial + test) are
+extracted — campaign and tutorial heroes have specs that need to
+resolve when those Hero records render.
+
+## D-029 — HeroSubClass: prestige classes with flat activation thresholds + dedicated bonus table
+
+**Date:** 2026-05-04
+**Status:** PARTIALLY SUPERSEDED by D-031. The `HeroSubClass` table
+itself, the 5 flat activation columns, and the bonus shape decisions
+are unchanged. The `HeroSubClassBonus` side table collapsed into
+the unified `Bonus` table with `parent_type='hero_sub_class'` —
+reversing this decision's "separate table per editor preference"
+choice once Items came online and a third copy of the same shape
+loomed.
+
+Hero sub-classes are the named prestige progressions
+(Swashbuckler, Paragon, Grand Inquisitor, Ascendant, etc.) a hero
+unlocks by hitting 5 specific skill thresholds. 24 records in the
+2026-05-03 corpus: 4 per faction × 6 factions, split 2 might + 2
+magic per faction.
+
+**Source:** `Core/DB/heroes_sub_classes/sub_classes_<faction>.json`.
+Folder uses singular faction ids (`human`, `undead`, `demon`) — note
+this diverges from the `heroes/` folder naming (`humans`, `necros`,
+`demons`).
+
+**Per-sub-class fields (uniform across all 24):** `id`, `icon`,
+`name` (SID), `desc` (SID), `faction`, `classType`,
+`activationConditions[]`, `bonuses[]`.
+
+**Activation conditions: 5 flat columns on `HeroSubClass`.**
+Empirically every sub-class has exactly 5 activation thresholds
+(`{skillSid, skillLevel, subSkillSids[]}`) and `subSkillSids` is
+always empty. Two paths considered:
+
+- **Side table HeroSubClassActivation** — clean, queryable, supports
+  variable count.
+- **Flat columns** (`activation_skill_<1..5>_sid` +
+  `activation_skill_<1..5>_level`) — denormalized but every sub-class
+  has exactly 5 in the corpus. 10 columns vs a 120-row side table.
+
+Chose **flat columns** per editor preference. The 5-condition
+invariant is strong (all 120 conditions across all 24 sub-classes
+follow it); if a future patch breaks it we'd have to migrate. The
+empty `subSkillSids` is dropped — adding the column "just in case"
+would carry no data in any present row.
+
+**Bonuses: dedicated `HeroSubClassBonus` table.** The bonus shape
+overlaps with `HeroSpecializationBonus` (both have `type` +
+`parameters` + optional `receivers` / `receiverAllegiance`) but
+sub-class bonuses don't carry `activationLevel`, `upgrade`,
+`battleType`, or `receiverRole`. Two paths considered:
+
+- **Consolidate into a generic `Bonus` table** with `parent_type`
+  discriminator (same play as Translation/Entry).
+- **Separate `HeroSubClassBonus` table** alongside the existing
+  `HeroSpecializationBonus`.
+
+Chose **separate** per editor preference. Reasoning: the bonus
+shapes are *similar* but not identical (sub-class drops 4
+columns); the smaller table makes filtered queries faster; the
+semantics stay self-evident for editors writing display
+templates. Schema duplication is real but bounded — only 2 tables
+share this shape, not the open-ended set Translation faces.
+
+**Code shape:**
+- `models/hero.py`: `HeroSubClassRecord` + `HeroSubClassBonus` +
+  `HeroSubClassExtractionResult`.
+- `extract/hero.py`: `extract_hero_sub_classes(paths)` walks
+  `DB/heroes_sub_classes/sub_classes_<faction>.json`.
+- `emit/hero.py`: `emit_hero_sub_class_page` renders the three
+  blocks per sub-class.
+
+**Page layout:** `Data:HeroSubClass/<id>` with `{{HeroSubClass}}` +
+`{{Translation | type=hero_sub_class | …}}` + N inline
+`{{HeroSubClassBonus}}` rows.
+
+**Description placeholder substitution:** sub-class descriptions
+mostly leave `{N}` for the wiki display layer to fill from joined
+bonus parameter values (e.g. "Heroic Strike deals +{0} basic
+Damage" — the {0} comes from the heroStat bonus's parameter[1]).
+Only one sub-class (`sub_class_demons_might_2`) has an args entry
+in `heroSkills.json`, and its referenced script function isn't
+defined in the script files. So no spec_json-style threading is
+needed; the resolver pipeline runs as-is and any unresolved {N}
+markers persist for the display side to handle.
+
+## D-030 — Spell + SpellRank with split learn-cost columns and hero-dependent placeholders left unsubstituted
+
+**Date:** 2026-05-04
+**Status:** Locked.
+
+Spells are the most structurally complex entity yet — each carries
+identity + classification, a 4-element per-mastery-level array of
+descriptions and mana costs, a 0-or-3-element per-upgrade bonus
+description list, multi-resource learn cost, plus optional fields
+for special-magic / unique-magic variants.
+
+**131-137 spells** in the 2026-05-03 corpus across 5 schools (day,
+night, primal, space, neutral) and 5 ranks. Two contexts (mutually
+exclusive via `usedOnMap`): battle (105) vs world (26). 38 are
+`_special` upgraded variants pointing back at base spells via
+`normalMagicSid`. Test scope includes the test/punishment files
+per editor preference.
+
+**Schema split:** `Spell` main table + `SpellRank` side table.
+SpellRank carries the per-mastery-level data — exactly 4 rows per
+spell (levels 1=no skill, 2=basic, 3=advanced, 4=expert). The
+level-up bonus message and the upgrade cost paid to reach a level
+attach to that level's SpellRank row (so level 1 has no bonus_*
+fields).
+
+**`learnCost` flattened** into 4 explicit columns on Spell:
+`learn_cost_gemstones`, `learn_cost_crystals`, `learn_cost_mercury`,
+`learn_cost_star_dust`. Most spells (94) use the
+gemstones/crystals/mercury triple; 6 unique-magic specials use
+star_dust. Other resources don't appear in learn costs.
+Sparse-emit: omit any column that's zero/missing.
+
+**Description resolution: hero-dependent placeholders intentionally
+stay as `{N}`.** Spell descriptions reference scripts like
+`current_day_1_magic_healing_water` that combine static spell
+config (read via the new `CurrentMagicBattle` op against
+`battleMagic.targetMechanics.*`) with hero-dependent values
+(`SpellpowerForCurrentMagic`, `CurrentHero` ops). The bot:
+
+- Adds `CurrentMagicBattle` and `CurrentMagicWorld` ops to the
+  interpreter, threading `magic_json` context through the same
+  pipeline as `spec_json` (D-027) and `unit_json`.
+- Does *not* implement `SpellpowerForCurrentMagic` or `CurrentHero`.
+  Their function calls fall through, returning None — the
+  corresponding `{N}` markers persist in the rendered description.
+
+This matches editor intent: a spell page shows the formula generally;
+specific numeric outcomes depend on the casting hero and live on
+hero-context displays the wiki templates can build via Cargo joins.
+
+**`battleMagic` / `worldMagic` sub-trees not extracted as columns.**
+These dicts hold the in-game effect mechanics (dealersPerLevels,
+hexEffect, magicSettings, etc.) and are used for resolver context
+only via `raw_json`. If the wiki ever needs columns for "duration",
+"hex shape", "effect type", etc., they get added then.
+
+**Page layout:** `Data:Spell/<id>` carrying `{{Spell}}` row, then
+4 paired `{{SpellRank}}` + `{{SpellRankTranslation}}` blocks (one
+pair per mastery level). ~137 spell pages; ~548 each of SpellRank
+and SpellRankTranslation rows.
+
+**Translation: dedicated `SpellRankTranslation` table, per-rank,
+3-SID shape.** Per D-030 (revised): the unified `Translation` table
+(D-026) has `(name, desc)` slots — spells have a third localizable
+field per rank (`bonus_description`). Rather than pollute the
+shared schema, spells get their own translation table. Each
+SpellRankTranslation row carries the spell name (repeated per
+rank for clean per-rank queries) plus the rank-specific desc and
+bonus_description, with 15 per-language triples. The per-spell
+`{{Translation | type=spell}}` row from the original D-030 is
+dropped — translations now flow exclusively through the per-rank
+SpellRankTranslation rows.
+
+**Code shape:**
+- `models/spell.py`: `SpellRecord` + `SpellRankRecord` +
+  `SpellExtractionResult`. Spell carries `raw_json` for the
+  placeholder resolver context (same pattern as
+  `HeroSpecializationRecord`).
+- `extract/spell.py`: walks `DB/magics/*.json`. Splits learnCost
+  into per-resource columns; partitions level-indexed arrays into
+  the 4 SpellRank rows; preserves source typos
+  (`excaptionInTooltip` → `excaption_in_tooltip_sid`) since the
+  field is rare and the Pythonic "exception" rename would obscure
+  the source.
+- `emit/spell.py`: `emit_spell_page`. Calls `_lookup_text` with
+  `magic_json=spell.raw_json` so the resolver can read
+  `battleMagic.*` / `worldMagic.*` paths. SpellRank rows resolve
+  their description and bonus_description English text inline.
+- `resolve/interpreter.py`: adds `CurrentMagicBattle` and
+  `CurrentMagicWorld` ops keyed on `context["magic_json"]`.
+- `resolve/resolver.py`: threads `magic_json` parameter through
+  `resolve` / `_resolve_inner` / `_eval_expr` / `_evaluate_args`.
+
+## D-031 — Unified `Bonus` table + Artifact entity; supersedes per-domain *Bonus tables
+
+**Date:** 2026-05-04
+**Status:** Locked.
+
+Artifact (equipment) ingest brought a third entity carrying the same
+``{type, parameters, [activationLevel], [upgrade], [receivers],
+[battleType], [receiverRole], [receiverAllegiance]}`` bonus shape
+that hero specializations and hero sub-classes also use. Three
+parallel tables of identical shape would have rerun the lesson
+D-024 (Entry) and D-026 (Translation) already taught:
+identical-shape parallel tables collapse into one discriminated
+table.
+
+**Resolution:** introduce a unified `Bonus` Cargo table at
+`docs/cargo/shared/Bonus.md`, keyed on `(parent_type, parent_id,
+ordinal)`. Migrate `HeroSpecializationBonus` and `HeroSubClassBonus`
+into it; `Artifact.bonuses` flow through it directly.
+
+**Schema** is the original `HeroSpecializationBonus` columns plus
+two discriminator columns at the head:
+
+```mediawiki
+{{#cargo_declare:_table=Bonus
+| parent_type = String     <!-- hero_specialization, hero_sub_class, artifact, ... -->
+| parent_id = String
+| ordinal = Integer
+| type = String
+| parameters = List (,) of String
+| activation_level = Integer
+| upgrade_increment = Float
+| upgrade_level_step = Integer
+| receivers = List (,) of String
+| battle_type = String
+| receiver_role = String
+| receiver_allegiance = String
+}}
+```
+
+**Artifacts: own dedicated `Artifact` table.** 304 records spanning
+13 source slot files (armor, head, ring, boots, magic_scroll,
+mythic_scroll_box, item_slot, etc.). Source folder
+(`DB/items/items/`) uses the JSON's "item" terminology, but the
+wiki side surfaces these as **artifacts** per the in-game
+player-facing label — the table, template, directory, and
+translation discriminator (`type=artifact`) all use the artifact
+spelling. Source field names that contain "item" (`itemSet`,
+`isSpecialItem`) are renamed where they're a normalized concept
+(`artifact_set_id`) and preserved where they're a near-source
+flag (`is_special_item`).
+
+Carries identity + slot/rarity classification + four localizable
+SIDs (name, description, upgrade_description, narrative_description).
+Artifact bonuses flow into `Bonus` per the above.
+
+**Artifact sets deferred.** Source has 24 sets in
+`DB/items/item_sets/item_sets.json` with nested
+`bonuses[].heroBonuses[]` structures (set-completion thresholds +
+per-tier bonus lists). The schema needs a separate design pass —
+the nested-bonus shape doesn't cleanly fit the flat Bonus table.
+Tracked as future work; the future table is `ArtifactSet`.
+
+**Translation:** artifacts use the standard
+`{{Translation | type=artifact}}` row carrying name + description
+(per D-026). The `upgrade_description` and `narrative_description`
+SIDs are stored on the Artifact row with their English-resolved text
+inline; their non-English translations are not extracted — a future
+pass can either extend Translation to a 3- or 4-SID shape (like
+SpellRankTranslation per D-030 revised) or accept that flavor text
+only ships in English.
+
+**`useExpandTooltip` source-typing inconsistency.** Source ships this
+field as both a proper bool and the string `"false"` on different
+artifacts. The bot normalizes to a real bool via `_coerce_bool`.
+
+**Code shape:**
+- `models/hero.py`: `HeroSpecializationBonus` and `HeroSubClassBonus`
+  collapsed into a single `Bonus` model with `parent_type` /
+  `parent_id` columns. Old names kept as aliases for backward compat.
+- `models/artifact.py` (new): `ArtifactRecord`,
+  `ArtifactExtractionResult`.
+- `extract/hero.py`: `_build_bonus` renamed to public `build_bonus`,
+  takes `parent_type` and `parent_id` parameters. The sub-class
+  extractor uses it. The dedicated `_build_sub_class_bonus` helper
+  is gone.
+- `extract/artifact.py` (new): `extract_artifacts(paths)`. Re-uses
+  `build_bonus` for artifact bonuses.
+- `emit/hero.py`: `_render_spec_bonus` and `_render_sub_class_bonus`
+  collapsed into a single public `render_bonus(b)`.
+- `emit/artifact.py` (new): `emit_artifact_page`. Uses `render_bonus`
+  for artifact bonuses.
+
+**Naming flip:** the old `HeroSpecializationBonus` template name
+disappears from page output — every bonus now renders as
+`{{Bonus | parent_type=… | parent_id=… | …}}`.
+
+**Considered and rejected:**
+- **Three separate tables (status quo extended).** Would have made
+  Item the third copy of the same shape. The pattern is now
+  well-established (D-024 Entry, D-026 Translation): consolidate.
+
+## D-032 — ItemSet + ItemSetTier with synthesized tier IDs into the unified Bonus table
+
+**Date:** 2026-05-04
+**Status:** Locked.
+
+Item sets are curated artifact groups granting threshold-unlocked
+bonuses. 24 sets in the 2026-05-03 corpus, 1-3 unlock tiers per
+set. The source's nested `bonuses[].heroBonuses[]` shape needed a
+specific decision on how to flatten it for Cargo.
+
+**Source shape:** each set has `id`, `name`, `itemsInSet[]` (list
+of artifact ids), and `bonuses[]` where each entry is
+`{requiredItemsAmount, desc, heroBonuses[]}`. ~37 tiers and 80
+total bonus effects across all 24 sets.
+
+**Resolution:** two paired tables plus integration with the unified
+Bonus table.
+
+`ItemSet` (24 rows) carries identity + name SID + the comma-joined
+`items_in_set` list. No description on the set itself — each tier
+has its own description.
+
+`ItemSetTier` (~37 rows) is a side table keyed on `id =
+<set_id>_tier_<ordinal>`. Carries `set_id` back-pointer, ordinal,
+required_amount, description SID + resolved English. The
+synthesized id format lets `Bonus.parent_id` join cleanly.
+
+`Bonus` rows for set tiers use `parent_type='item_set_tier'` and
+`parent_id = <set_id>_tier_<ordinal>`. The bonus shape is a subset
+of the existing Bonus columns (only `type`, `parameters`, optional
+`receivers` and `receiver_allegiance`); no new columns needed.
+
+**Translation:**
+- `{{Translation | type=item_set | target_id=<set_id>}}` for the set
+  name (15 non-English locales).
+- `{{Translation | type=item_set_tier | target_id=<tier_id>}}` for
+  each tier's description (desc-only — tiers have no name field).
+
+**"Item set" terminology preserved** despite the artifact rename
+(D-031). Source JSON uses `itemSet`, `itemsInSet`,
+`item_sets.json`, and players colloquially call them "item sets"
+rather than "artifact sets". The Cargo table is `ItemSet`, the
+template is `{{ItemSet}}`, the directory is `data/item_sets/`, and
+`Translation.type='item_set'` — all preserve the source spelling.
+The cross-pointer `Artifact.artifact_set_id` still references
+`ItemSet.id` despite the naming asymmetry.
+
+**Considered and rejected:**
+- **Composite `parent_id` like `<set_id>::<tier_ordinal>`** for
+  Bonus rows. Awkward to parse for queries that just want the set
+  id. Synthesized tier id (`<set_id>_tier_<ordinal>`) plus a
+  separate `set_id` column on ItemSetTier is cleaner.
+- **Add a `tier` column to Bonus** for the item-set case. Pollutes
+  the generic Bonus schema for one specific use.
+- **Single ItemSet table with all tiers' bonuses inlined as
+  comma-joined data.** Lossy — heroBonuses can have multiple
+  effects per tier with structured fields.
+
+**Code shape:**
+- `models/item_set.py` (new): `ItemSetRecord`, `ItemSetTierRecord`,
+  `ItemSetExtractionResult`.
+- `extract/item_set.py` (new): `extract_item_sets`. Reuses
+  `build_bonus` from `extract/hero.py` per the unified Bonus
+  pipeline (D-031).
+- `emit/item_set.py` (new): `emit_item_set_page`. Uses
+  `render_bonus` and `render_translation_block`.
+
+**Open follow-up:** the cross-pointer naming asymmetry —
+`Artifact.artifact_set_id` references `ItemSet.id` — is intentional
+per the user's call to keep "item set" naming, but a future tidying
+pass could align them either direction.
+
 ## Open questions / known unknowns
 
 - **Faction laws have nested arrays** (`fractionLawsLines: [{groups: [{laws: [...]}]}]`). Cargo doesn't natively support nested structures; will need either a side table with foreign keys or list-typed fields. Cross when we get there.

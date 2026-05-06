@@ -9,7 +9,7 @@ Format::
     }
 
 Comments and whitespace are tolerated. Args can be quoted strings or
-bareword identifiers (function refs, JSON paths, numeric literals, etc.).
+barewords.
 """
 
 from __future__ import annotations
@@ -36,6 +36,7 @@ _FUNC_RE = re.compile(
     r"(?ms)^\s*([A-Za-z_]\w*)\s+([A-Za-z_]\w*)\s*\{([^}]*)\}"
 )
 _CALL_RE = re.compile(r"([A-Za-z_]\w*)\s*\((.*?)\)\s*", re.DOTALL)
+_COMMENT_RE = re.compile(r"//[^\n]*")
 
 
 def _split_args(inner: str) -> list[str]:
@@ -78,12 +79,11 @@ def _split_args(inner: str) -> list[str]:
     tail = "".join(cur).strip()
     if tail:
         out.append(tail)
-    # Strip surrounding quotes
     return [a.strip().strip('"').strip("'") if (a.startswith('"') or a.startswith("'")) else a.strip() for a in out]
 
 
 class ScriptRegistry:
-    """Function name → Function. Built once per pipeline run."""
+    """Function name -> Function. Built once per pipeline run."""
 
     def __init__(self) -> None:
         self._funcs: dict[str, Function] = {}
@@ -97,6 +97,7 @@ class ScriptRegistry:
             self.parse_text(text)
 
     def parse_text(self, text: str) -> None:
+        text = _COMMENT_RE.sub("", text)
         for fm in _FUNC_RE.finditer(text):
             decl, name, body = fm.group(1), fm.group(2), fm.group(3)
             statements: list[Statement] = []

@@ -366,6 +366,10 @@ def render_translation_block(
     resolver: PlaceholderResolver | None = None,
     unit_json: dict[str, Any] | None = None,
     ability_json: dict[str, Any] | None = None,
+    spec_json: dict[str, Any] | None = None,
+    magic_json: dict[str, Any] | None = None,
+    set_json: dict[str, Any] | None = None,
+    artifact_json: dict[str, Any] | None = None,
 ) -> str:
     """Render a single ``{{Translation | …}}`` template invocation.
 
@@ -391,11 +395,15 @@ def render_translation_block(
         code = LANG_CODE[lang_dir]
         if name_sid:
             params[f"{code}_name"] = _lookup_text(
-                name_sid, lang_dir, corpus, resolver, unit_json, ability_json
+                name_sid, lang_dir, corpus, resolver, unit_json, ability_json,
+                spec_json=spec_json, magic_json=magic_json, set_json=set_json,
+                artifact_json=artifact_json,
             )
         if desc_sid:
             params[f"{code}_desc"] = _lookup_text(
-                desc_sid, lang_dir, corpus, resolver, unit_json, ability_json
+                desc_sid, lang_dir, corpus, resolver, unit_json, ability_json,
+                spec_json=spec_json, magic_json=magic_json, set_json=set_json,
+                artifact_json=artifact_json,
             )
 
     return render_call("Translation", params, key_order=_TRANSLATION_FIELD_ORDER)
@@ -638,6 +646,10 @@ def _lookup_text(
     sid: str | None, lang: str, corpus: LocalizationCorpus,
     resolver: PlaceholderResolver | None, unit_json: dict[str, Any] | None,
     ability_json: dict[str, Any] | None = None,
+    spec_json: dict[str, Any] | None = None,
+    magic_json: dict[str, Any] | None = None,
+    set_json: dict[str, Any] | None = None,
+    artifact_json: dict[str, Any] | None = None,
 ) -> str | None:
     if not sid:
         return None
@@ -645,12 +657,32 @@ def _lookup_text(
     if raw is None:
         return None
     if resolver is not None:
-        return resolver.resolve(sid, raw, unit_json, lang=lang, ability_json=ability_json)
+        return resolver.resolve(
+            sid, raw, unit_json,
+            lang=lang, ability_json=ability_json, spec_json=spec_json,
+            magic_json=magic_json, set_json=set_json, artifact_json=artifact_json,
+        )
     return html_to_wiki(raw)
 
 
 def _ability_json_for(ability: UnitAbility, unit_json: dict[str, Any] | None) -> dict[str, Any] | None:
-    if unit_json is None or ability.ordinal is None:
+    if unit_json is None:
+        return None
+    # Preferred path: use the source-array provenance recorded at extract
+    # time. This handles the case where alternativeAttacks consume some
+    # ordinals before the regular abilities[] list — the `ordinal` then
+    # doesn't match the JSON index (e.g. black_dragon Inner Flame is
+    # ordinal=2 but lives at logic.abilities[0]).
+    if ability.source_array and ability.source_index is not None:
+        arr = unit_json.get(ability.source_array)
+        if isinstance(arr, list) and 0 <= ability.source_index < len(arr):
+            entry = arr[ability.source_index]
+            return entry if isinstance(entry, dict) else None
+        return None
+    # Fallback: derive from ordinal alone (correct for ability_types
+    # whose ordinals trivially match the JSON array, currently
+    # passive / conditional_passive / global_passive / aura).
+    if ability.ordinal is None:
         return None
     idx = ability.ordinal - 1
     array_key: str | None = None

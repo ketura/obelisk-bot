@@ -14,18 +14,20 @@ from artificer.diff.wiki_diff import WikiDiff, WikiPageDiff
 _ENTITY_HEADINGS: dict[str, str] = {
     "units": "Units",
     "factions": "Factions",
+    "heroes": "Heroes",
+    "hero_classes": "Hero Classes",
+    "hero_specializations": "Hero Specializations",
+    "hero_sub_classes": "Hero Sub-Classes",
     "attack_archetype": "Attack Archetypes",
     "attack_passives": "Attack Passives",
     "movement": "Movement",
     "creature_type": "Creature Types",
-    "heroes": "Heroes",
     "spells": "Spells",
-    "items": "Items",
+    "artifacts": "Artifacts",
     "item_sets": "Item Sets",
     "buildings": "Buildings",
     "faction_laws": "Faction Laws",
     "hero_skills": "Hero Skills",
-    "hero_specializations": "Hero Specializations",
     "buffs": "Buffs",
 }
 
