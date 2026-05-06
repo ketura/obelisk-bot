@@ -52,13 +52,13 @@ extracted/                 # canonical JSON dumps from extraction
 diffs/                     # rendered changelogs
 *.local.toml               # local config overrides (bot creds etc)
 secrets.toml
-.artificer/
+.obelisk/
 
 # .wheelhouse/ — sandbox-only dev convenience.
 # Linux/cp310 wheels for offline pip install in the assistant's no-network sandbox.
 # Anyone else just runs 'pip install -e .[dev]' normally.
 .wheelhouse/
-artificer.ini
+obelisk.ini
 
 out/
 out_test/

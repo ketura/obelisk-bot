@@ -34,7 +34,7 @@ Join to `UnitAbility` on `ability_id`.
   according to the mechanic — `attackPen` displays as a percent,
   `outDamageIfLevelAbove` as an absolute multiplier, etc.
 - **The mapping mechanic-key → display-name + SID** is in
-  `artificer.emit.unit`'s `STAT_PASSIVE_REGISTRY`. New mechanic keys
+  `obelisk.emit.unit`'s `STAT_PASSIVE_REGISTRY`. New mechanic keys
   surface in the audit report when the bot can't classify them.
 - **No L10n fields here:** the parent UnitAbility row carries `name_sid`
   and `desc_sid` pointing at the shared `base_passive_*` SID family.

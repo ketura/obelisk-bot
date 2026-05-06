@@ -1,9 +1,0 @@
-# Copy to artificer.ini and fill in. The real file is git-ignored.
-
-[wiki]
-host = oldenera.wiki.gg
-path = /
-username = Yourname@artificer-bot
-bot_password = xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-user_agent = artificer-bot/0.1 (+https://github.com/your-org/artificer-bot)
-edit_summary = artificer-bot: patch sync

@@ -1,0 +1,9 @@
+# Copy to obelisk.ini and fill in. The real file is git-ignored.
+
+[wiki]
+host = oldenera.wiki.gg
+path = /
+username = Yourname@obelisk-bot
+bot_password = xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+user_agent = obelisk-bot/0.1 (+https://github.com/your-org/obelisk-bot)
+edit_summary = obelisk-bot: patch sync

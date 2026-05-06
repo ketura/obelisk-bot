@@ -314,7 +314,7 @@ re-emit the old patch. (If they want a fresh old emit, they run `emit-all-units`
 on the old patch dump first.) This keeps the cycle command's I/O explicit and
 caching-free.
 
-**Wiki credentials** live in a project-local `artificer.toml` (gitignored), not
+**Wiki credentials** live in a project-local `obelisk.toml` (gitignored), not
 env vars. Keeps multi-environment setups straightforward.
 
 ## D-020 — Unused-unit detection: english-name signal only
@@ -642,7 +642,7 @@ single `Entry` Cargo table, `(type, subtype)` is still the primary
 key, so the data side handles collisions naturally.
 
 **Directory→namespace mapping:** lives in `_DIR_TO_WIKI_TABLE`
-(`src/artificer/diff/wiki_diff.py`). Add an entry there when
+(`src/obelisk/diff/wiki_diff.py`). Add an entry there when
 introducing a new Entry type so the diff/upload pipeline knows the
 PascalCase name to use in `Data:<…>/<subtype>` page titles.
 

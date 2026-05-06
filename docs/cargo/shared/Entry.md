@@ -19,7 +19,7 @@ Entry rows come from two sources:
 
 1. **Hand-curated seeds** — small enums the wiki ships pre-populated
    (attack archetypes, movement types, creature types). These live in
-   the `ENTRY_SEEDS` dict in `src/artificer/emit/unit.py`.
+   the `ENTRY_SEEDS` dict in `src/obelisk/emit/unit.py`.
 2. **Per-patch extracted data** — name+i18n-only data harvested from
    the source JSON each patch (currently: faction city names from
    `DB/fractions/*.json`). The extractor module (`extract/faction.py`,
@@ -111,7 +111,7 @@ Examples:
 | `FactionCityName` | (inline on `data/factions/<id>.wiki.txt`) | (inline on `Data:Faction/<id>`) |
 
 The directory→wiki-namespace mapping lives in `_DIR_TO_WIKI_TABLE`
-(`src/artificer/diff/wiki_diff.py`) — extend it when adding a new
+(`src/obelisk/diff/wiki_diff.py`) — extend it when adding a new
 Entry type.
 
 ## Initial canonical content

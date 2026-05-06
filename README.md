@@ -1,4 +1,4 @@
-# artificer-bot
+# obelisk-bot
 
 Heroes of Might and Magic: Olden Era — wiki data pipeline.
 
@@ -25,16 +25,16 @@ When a new patch drops:
 
 # 2. Extract the new patch (and the old one, if you don't have it yet).
 #    Output: out/<label>/  (label defaults to the dir name)
-artificer extract ../2026-03-15
-artificer extract ../2026-04-30
+obelisk extract ../2026-03-15
+obelisk extract ../2026-04-30
 
 # 3. Diff the two by label. Output: out/<new>/diff_vs_<old>/
 #    Review wiki_summary.md, patch_article.wiki.txt, json_diff.txt.
 #    Hand-edit the patch article if you want.
-artificer diff 2026-03-15 2026-04-30
+obelisk diff 2026-03-15 2026-04-30
 
 # 4. Push when satisfied.
-artificer upload 2026-03-15 2026-04-30
+obelisk upload 2026-03-15 2026-04-30
 ```
 
 `diff` finds both extracts under `out/`. The `_meta.json` written by `extract` records the source patch path, so the deep core-JSON diff works automatically as long as both source patch dirs are still on disk.
@@ -45,15 +45,15 @@ artificer upload 2026-03-15 2026-04-30
 
 ```sh
 # Top-level (routine use)
-artificer extract <patch>                       # extract+emit a patch dump
-artificer diff <old_label> <new_label>    # diff two extracts (writes manifest.json)
-artificer upload <old_label> <new_label>        # push the manifest's pages to the wiki
+obelisk extract <patch>                       # extract+emit a patch dump
+obelisk diff <old_label> <new_label>    # diff two extracts (writes manifest.json)
+obelisk upload <old_label> <new_label>        # push the manifest's pages to the wiki
 
 # Diagnostics
-artificer render-unit <patch> <unit_id>         # render one unit's wikitext to stdout
-artificer inspect <patch>                       # counts/factions/coverage
-artificer extract-l10n <patch>                  # l10n corpus stats
-artificer ownership-report <patch>              # SID-ownership coverage
+obelisk render-unit <patch> <unit_id>         # render one unit's wikitext to stdout
+obelisk inspect <patch>                       # counts/factions/coverage
+obelisk extract-l10n <patch>                  # l10n corpus stats
+obelisk ownership-report <patch>              # SID-ownership coverage
 ```
 
 All path/label arguments are positional. Optional `--out <root>` overrides the output root (defaults to `out/`).
@@ -72,13 +72,13 @@ out/
       changed_pages/<id>.diff      per-page unified diff
       wiki_summary.md              operator markdown summary
       patch_article.wiki.txt       body for Data:Patches/<label>  (hand-editable)
-      manifest.json                upload manifest (consumed by `artificer upload`)
+      manifest.json                upload manifest (consumed by `obelisk upload`)
       json_diff.txt                deep core-JSON diff (when both _meta point at live patch dirs)
 ```
 
 ## Wiki credentials
 
-Upload mode reads `artificer.ini` from the project root (gitignored). Copy `artificer.ini.example` and fill in your bot account + bot password. MediaWiki bot passwords are managed at `Special:BotPasswords` on the wiki.
+Upload mode reads `obelisk.ini` from the project root (gitignored). Copy `obelisk.ini.example` and fill in your bot account + bot password. MediaWiki bot passwords are managed at `Special:BotPasswords` on the wiki.
 
 ## Install
 
@@ -87,7 +87,7 @@ uv venv
 uv pip install -e ".[dev]"
 ```
 
-The CLI is installed as `artificer` (and is also runnable via `python -m artificer.cli`).
+The CLI is installed as `obelisk` (and is also runnable via `python -m obelisk.cli`).
 
 ## License
 

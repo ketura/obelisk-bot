@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from artificer.models import (
+from obelisk.models import (
     Faction,
     LocalizationCorpus,
     LocalizationEntry,
