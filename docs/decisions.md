@@ -1419,9 +1419,119 @@ The cross-pointer `Artifact.artifact_set_id` still references
 per the user's call to keep "item set" naming, but a future tidying
 pass could align them either direction.
 
+## D-033 — Faction laws: Law + LawLevel + LawLevelTranslation + LawTreePosition + FactionLawTier; Bonus extended with `action_area` + `fraction`
+
+**Date:** 2026-05-06
+**Status:** Locked.
+
+The faction-law tree is the largest discrete remaining content
+domain — 198 production laws across 6 factions plus 34 test laws,
+each with 1-3 mastery levels and 0+ structured bonuses per level.
+Earlier decisions (D-025) deferred the tree shape; this one
+addresses it.
+
+**Source shape:**
+- `DB/fractions_laws/fractions_laws_table_<faction>.json` (six prod
+  files) and `fractions_laws_test*.json` (two test files). Each
+  entry: `{id, name, desc, icon, parametersPerLevel[]}`. Each level:
+  `{cost, bonuses[]}`.
+- `DB/fractions/<faction>.json` carries `fractionLawsLines[]` — five
+  tier rows, each with `countToUnlock` and two `groups` (Faction-
+  side / Army-side), each holding 2-4 law id references.
+
+**Resolution:** five tables.
+
+`Law` (~232 rows, prod + test) — identity (id, faction, ordinal,
+tier, name, desc_sid, icon, max_level), `test` boolean for the
+debug-table laws. `tier` lives here because moving a law from tier
+2 → tier 3 is a balance change; storing it on Law lets queries ask
+"is this a tier-3 law" without joining `LawTreePosition`. NULL
+faction/tier for test laws.
+
+`LawLevel` (~480 rows) — `(law_id, level)`-keyed side table with
+`cost` and the resolved English `description` for that level's
+parameter substitutions. The parent's `desc_sid` is shared across
+levels; the resolver substitutes per-level numbers via a new
+`CurrentFractionLawConfig` op (mirrors `CurrentHeroSpecializationConfig`).
+
+`LawLevelTranslation` — same shape as SpellRankTranslation (D-030
+revised): one row per `(law_id, level)` with the description in 15
+non-English locales. Per-level rather than per-law because each
+level resolves to a distinct localized string.
+
+`LawTreePosition` (~198 rows, prod only) — `(faction, tier, side,
+slot)` → `law_id`. `side` is `faction` or `army`, matching the
+in-game screen labels; derived from the `groups[0]` / `groups[1]`
+indices in source. Test laws have no placement.
+
+`FactionLawTier` (30 rows: 6 factions × 5 tiers) — `(faction, tier)`
+→ `count_to_unlock`. All six factions ship `[0, 5, 15, 30, 50]` in
+the 2026-05-05 corpus, but the table is per-faction so a future
+patch can rebalance one faction independently.
+
+`Bonus` extended with two optional columns: `action_area` (string,
+e.g. `allied`) and `fraction` (string, target-faction filter).
+Both surface only on law-level bonuses in the current corpus, so
+existing parent_types (hero_specialization, hero_sub_class,
+artifact, item_set_tier) leave them NULL. Single new
+`parent_type='law_level'` value with `parent_id=<law_id>_L<level>`.
+
+**Page layout** (`Data:Law/<id>`):
+1. `{{Law}}` row.
+2. `{{Translation | type=law | …}}` for the shared name.
+3. Per level: `{{LawLevel}}`, `{{LawLevelTranslation}}`, then 0+
+   `{{Bonus | parent_type=law_level | parent_id=<id>_L<level> | …}}`.
+
+**Faction page additions** (`Data:Faction/<id>`): now also carries
+the 5 `{{FactionLawTier}}` rows + ~30 `{{LawTreePosition}}` rows
+for that faction's tree. No separate `Data:LawTreePosition/…`
+pages.
+
+**Test laws kept, not skipped.** Per the user's call: balance
+patches sometimes promote test laws to production, and `test=true`
+filters cleanly via `WHERE Law.test = false`. They get
+`faction=NULL`, `tier=NULL`, no `LawTreePosition` row.
+
+**Considered and rejected:**
+- **Tier on `LawTreePosition` only.** Forces a join for every
+  balance query. Storing on both is one column of redundancy for
+  cleaner queries.
+- **Inline `fractionLawsLines` on Faction wikitext (no
+  LawTreePosition table).** Static-layout-only is fine until
+  someone wants to query "all tier-3 nature laws" — the Cargo
+  table makes that a one-liner.
+- **`extra_json` blob on Bonus instead of `action_area`/`fraction`
+  columns.** Two columns isn't proliferation, and they stay
+  queryable. The blob escape hatch can come later if extension
+  fields get truly numerous.
+- **Composite `Bonus.parent_id` syntax** (e.g. `<law>::<level>`).
+  The `<law>_L<level>` suffix is unambiguous (no existing
+  parent_id ends in `_L<digits>`) and keeps `(parent_type,
+  parent_id, ordinal)` as a stable primary key shape.
+
+**Code shape:**
+- `models/law.py` (new): `LawRecord`, `LawLevelRecord`,
+  `LawTreePositionRecord`, `FactionLawTierRecord`,
+  `LawExtractionResult`.
+- `extract/law.py` (new): `extract_laws` walks both
+  `fractions_laws/` and `fractions/` (the latter for tree
+  positions + faction-tier thresholds). Centralizing the
+  cross-file pre-pass in the law extractor keeps `extract/faction.py`
+  unchanged.
+- `emit/law.py` (new): `emit_law_page`.
+- `emit/faction.py` (extended): accepts `law_tiers` + `law_positions`
+  kwargs and inlines the matching rows after city-name entries.
+- `resolve/interpreter.py` (extended): new `CurrentFractionLawConfig`
+  op, plus `law_json` threaded through `resolver.resolve` →
+  `_eval_expr` → emit `_lookup_text` → `render_translation_block`.
+
+**Resolves the deferred bullet** under "Open questions" that called
+out the nested-array problem: side tables + flattened tree
+positions handle it cleanly.
+
 ## Open questions / known unknowns
 
-- **Faction laws have nested arrays** (`fractionLawsLines: [{groups: [{laws: [...]}]}]`). Cargo doesn't natively support nested structures; will need either a side table with foreign keys or list-typed fields. Cross when we get there.
+
 - **`fraction` vs `faction`** — source JSON uses "fraction" (likely a translation artifact); we normalize to "faction" on extract. OEE's domain entities also normalize this.
 - **Bot account creation** — blocking the upload phase. User to create when we're closer to that milestone.
 - **Bucket page structure for orphan SIDs** — exact split (one big page? per-source-file?) deferred until we know the orphan distribution.

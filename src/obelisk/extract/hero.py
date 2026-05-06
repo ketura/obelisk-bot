@@ -370,6 +370,8 @@ def build_bonus(
         receiver_role=raw.get("receiverRole") if isinstance(raw.get("receiverRole"), str) else None,
         receiver_allegiance=(raw.get("receiverAllegiance")
                              if isinstance(raw.get("receiverAllegiance"), str) else None),
+        action_area=raw.get("actionArea") if isinstance(raw.get("actionArea"), str) else None,
+        fraction=raw.get("fraction") if isinstance(raw.get("fraction"), str) else None,
     )
 
 

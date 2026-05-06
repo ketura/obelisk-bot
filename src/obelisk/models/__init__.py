@@ -12,13 +12,13 @@ from obelisk.models.hero import (
     HeroClassRecord,
     HeroExtractionResult,
     HeroRecord,
-    HeroSpecializationBonus,  # backward-compat alias for Bonus
+    HeroSpecializationBonus,
     HeroSpecializationExtractionResult,
     HeroSpecializationRecord,
     HeroStartSquadSlot,
     HeroStats,
     HeroStatsRolls,
-    HeroSubClassBonus,  # backward-compat alias for Bonus
+    HeroSubClassBonus,
     HeroSubClassExtractionResult,
     HeroSubClassRecord,
 )
@@ -30,6 +30,13 @@ from obelisk.models.item_set import (
     ItemSetExtractionResult,
     ItemSetRecord,
     ItemSetTierRecord,
+)
+from obelisk.models.law import (
+    FactionLawTierRecord,
+    LawExtractionResult,
+    LawLevelRecord,
+    LawRecord,
+    LawTreePositionRecord,
 )
 from obelisk.models.spell import (
     SpellExtractionResult,
@@ -56,6 +63,7 @@ __all__ = [
     "AttackSlot",
     "Bonus",
     "Faction",
+    "FactionLawTierRecord",
     "FactionRecord",
     "HeroClassRecord",
     "HeroExtractionResult",
@@ -72,6 +80,10 @@ __all__ = [
     "ItemSetExtractionResult",
     "ItemSetRecord",
     "ItemSetTierRecord",
+    "LawExtractionResult",
+    "LawLevelRecord",
+    "LawRecord",
+    "LawTreePositionRecord",
     "LocalizationCorpus",
     "LocalizationEntry",
     "ResourceCost",

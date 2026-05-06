@@ -8,6 +8,7 @@ from obelisk.extract.hero import (
 )
 from obelisk.extract.artifact import extract_artifacts
 from obelisk.extract.item_set import extract_item_sets
+from obelisk.extract.law import extract_laws
 from obelisk.extract.spell import extract_spells
 from obelisk.extract.loader import (
     CorePaths,
@@ -34,6 +35,7 @@ __all__ = [
     "extract_artifacts",
     "extract_heroes",
     "extract_item_sets",
+    "extract_laws",
     "extract_spells",
     "extract_units",
     "extract_units_enriched",

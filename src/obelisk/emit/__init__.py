@@ -10,6 +10,7 @@ from obelisk.emit.hero import (
 )
 from obelisk.emit.artifact import emit_artifact_page
 from obelisk.emit.item_set import emit_item_set_page
+from obelisk.emit.law import emit_law_page
 from obelisk.emit.spell import emit_spell_page
 from obelisk.emit.unit import (
     ENTRY_SEEDS,
@@ -35,6 +36,7 @@ __all__ = [
     "emit_artifact_page",
     "emit_hero_sub_class_page",
     "emit_item_set_page",
+    "emit_law_page",
     "emit_spell_page",
     "emit_unit_page",
     "iter_entry_seeds",

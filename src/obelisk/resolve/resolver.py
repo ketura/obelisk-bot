@@ -54,12 +54,13 @@ class PlaceholderResolver:
         magic_json: dict[str, Any] | None = None,
         set_json: dict[str, Any] | None = None,
         artifact_json: dict[str, Any] | None = None,
+        law_json: dict[str, Any] | None = None,
     ) -> str:
         if not text:
             return text or ""
         return self._resolve_inner(
             sid, text, unit_json, lang, ability_json, spec_json, magic_json,
-            set_json, artifact_json, _seen=set(),
+            set_json, artifact_json, law_json, _seen=set(),
         )
 
     def _resolve_inner(
@@ -73,6 +74,7 @@ class PlaceholderResolver:
         magic_json: dict[str, Any] | None,
         set_json: dict[str, Any] | None,
         artifact_json: dict[str, Any] | None,
+        law_json: dict[str, Any] | None,
         _seen: set[str],
     ) -> str:
         args = self.args_index.get(sid)
@@ -86,10 +88,11 @@ class PlaceholderResolver:
             "magic_json": magic_json or {},
             "set_json": set_json or {},
             "artifact_json": artifact_json or {},
+            "law_json": law_json or {},
         }
         values = self._evaluate_args(
             args, ctx, unit_json, lang, ability_json, spec_json, magic_json,
-            set_json, artifact_json, _seen,
+            set_json, artifact_json, law_json, _seen,
         )
 
         def sub(match: re.Match[str]) -> str:
@@ -112,13 +115,15 @@ class PlaceholderResolver:
         magic_json: dict[str, Any] | None,
         set_json: dict[str, Any] | None,
         artifact_json: dict[str, Any] | None,
+        law_json: dict[str, Any] | None,
         _seen: set[str],
     ) -> list[str | None]:
         values: list[str | None] = []
         for arg_name in args:
             values.append(
                 self._eval_expr(arg_name, ctx, unit_json, lang, ability_json,
-                                spec_json, magic_json, set_json, artifact_json, _seen)
+                                spec_json, magic_json, set_json, artifact_json,
+                                law_json, _seen)
             )
         return values
 
@@ -133,6 +138,7 @@ class PlaceholderResolver:
         magic_json: dict[str, Any] | None,
         set_json: dict[str, Any] | None,
         artifact_json: dict[str, Any] | None,
+        law_json: dict[str, Any] | None,
         _seen: set[str],
     ) -> str | None:
         """Evaluate one args-side expression.
@@ -161,7 +167,7 @@ class PlaceholderResolver:
             alt_sid = alt_sid.strip()
             left_val = self._eval_expr(
                 left_expr, ctx, unit_json, lang, ability_json,
-                spec_json, magic_json, set_json, artifact_json, _seen
+                spec_json, magic_json, set_json, artifact_json, law_json, _seen
             )
             if self.corpus is None:
                 return left_val
@@ -188,7 +194,7 @@ class PlaceholderResolver:
                     continue
                 sub_map[j] = self._eval_expr(
                     alt_args[k], ctx, unit_json, alt_lang, ability_json,
-                    spec_json, magic_json, set_json, artifact_json, sub_seen
+                    spec_json, magic_json, set_json, artifact_json, law_json, sub_seen
                 )
 
             def _sub(m: re.Match[str]) -> str:
@@ -206,7 +212,8 @@ class PlaceholderResolver:
             if sub_text is not None:
                 return self._resolve_inner(
                     expr, sub_text, unit_json, lang, ability_json,
-                    spec_json, magic_json, set_json, artifact_json, _seen | {expr}
+                    spec_json, magic_json, set_json, artifact_json, law_json,
+                    _seen | {expr}
                 )
         return None
 

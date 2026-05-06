@@ -8,10 +8,11 @@ Emits everything for a faction on a single ``Data:Faction/<id>`` page:
    — the 15 non-English locales (per D-026).
 3. 20 × ``{{Entry | type=FactionCityName | subtype=<faction>_<N> | …}}``
    — one row per city in the faction's randomization pool, in numeric
-   source order. These rows write to the unified Cargo Entry table
-   (see D-024) but the only wiki page that hosts them is the parent
-   faction page; there are no individual ``Data:FactionCityName/…``
-   pages. See D-025 (revised).
+   source order. See D-025.
+4. 5 × ``{{FactionLawTier | faction=… | tier=… | count_to_unlock=…}}`` —
+   per-tier unlock thresholds (D-033).
+5. ~30 × ``{{LawTreePosition | faction=… | tier=… | side=… | slot=… | law_id=…}}``
+   — one row per law placement on this faction's law screen (D-033).
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from obelisk.emit.unit import (
     render_translation_block,
 )
 from obelisk.models.faction import FactionRecord
+from obelisk.models.law import FactionLawTierRecord, LawTreePositionRecord
 from obelisk.models.localization import LocalizationCorpus
 from obelisk.resolve import PlaceholderResolver
 
@@ -37,11 +39,22 @@ _FACTION_FIELD_ORDER: tuple[str, ...] = (
     "source_path",
 )
 
+_FACTION_LAW_TIER_FIELD_ORDER: tuple[str, ...] = (
+    "faction", "tier", "count_to_unlock",
+)
+
+_LAW_TREE_POSITION_FIELD_ORDER: tuple[str, ...] = (
+    "faction", "tier", "side", "slot", "law_id",
+)
+
 
 def emit_faction_page(
     faction: FactionRecord,
     corpus: LocalizationCorpus,
     resolver: PlaceholderResolver | None = None,
+    *,
+    law_tiers: tuple[FactionLawTierRecord, ...] = (),
+    law_positions: tuple[LawTreePositionRecord, ...] = (),
 ) -> str:
     """Render the ``Data:Faction/<id>`` page body.
 
@@ -98,5 +111,34 @@ def emit_faction_page(
                 resolver=resolver,
             )
         )
+
+    # Per D-033: faction-law tree layout lives here too.
+    for tier_row in law_tiers:
+        if tier_row.faction != faction.id:
+            continue
+        blocks.append(render_call(
+            "FactionLawTier",
+            {
+                "faction": tier_row.faction,
+                "tier": tier_row.tier,
+                "count_to_unlock": tier_row.count_to_unlock,
+            },
+            key_order=_FACTION_LAW_TIER_FIELD_ORDER,
+        ))
+
+    for pos in law_positions:
+        if pos.faction != faction.id:
+            continue
+        blocks.append(render_call(
+            "LawTreePosition",
+            {
+                "faction": pos.faction,
+                "tier": pos.tier,
+                "side": pos.side,
+                "slot": pos.slot,
+                "law_id": pos.law_id,
+            },
+            key_order=_LAW_TREE_POSITION_FIELD_ORDER,
+        ))
 
     return "\n\n".join(blocks) + "\n"

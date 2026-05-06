@@ -213,7 +213,7 @@ class Bonus(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    parent_type: str  # e.g. hero_specialization, hero_sub_class, item
+    parent_type: str  # e.g. hero_specialization, hero_sub_class, artifact, item_set_tier, law_level
     parent_id: str
     ordinal: int  # 0-based position within the parent's bonuses[]
     type: str
@@ -225,6 +225,9 @@ class Bonus(BaseModel):
     battle_type: str | None = None
     receiver_role: str | None = None
     receiver_allegiance: str | None = None
+    # Law-bonus extensions (D-033). Optional everywhere else.
+    action_area: str | None = None
+    fraction: str | None = None
 
 
 # Backward-compat alias — extract code may still reference the old name.

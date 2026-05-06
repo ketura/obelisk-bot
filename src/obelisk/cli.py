@@ -35,6 +35,7 @@ from obelisk.emit import (
     emit_hero_specialization_page,
     emit_hero_sub_class_page,
     emit_item_set_page,
+    emit_law_page,
     emit_spell_page,
     emit_unit_page,
     iter_entry_seeds,
@@ -47,6 +48,7 @@ from obelisk.extract import (
     extract_hero_sub_classes,
     extract_heroes,
     extract_item_sets,
+    extract_laws,
     extract_spells,
     extract_units_enriched,
     load_localization_corpus,
@@ -151,10 +153,11 @@ def cmd_extract(
     spell_dir = data_dir / "spells"
     artifact_dir = data_dir / "artifacts"
     item_set_dir = data_dir / "item_sets"
+    law_dir = data_dir / "laws"
     attack_passive_dir = data_dir / "attack_passives"
     for d in (unit_dir, faction_dir, hero_class_dir, hero_dir, hero_spec_dir,
               hero_sub_class_dir, spell_dir, artifact_dir, item_set_dir,
-              attack_passive_dir):
+              law_dir, attack_passive_dir):
         d.mkdir(parents=True, exist_ok=True)
     # Per-type Entry dirs (data/<type>/) get created lazily inside the
     # entry loop below so the seed dict drives the directory layout.
@@ -180,6 +183,7 @@ def cmd_extract(
 
     t3 = time.monotonic()
     total_chars = 0
+    n_unit_abilities_by_type: dict[str, int] = {}
     for u in result.units:
         src = paths.core_root / u.source_path
         unit_json = None
@@ -199,16 +203,29 @@ def cmd_extract(
         (unit_dir / f"{u.id}.wiki.txt").write_text(page, encoding="utf-8")
         if src.is_file():
             (unit_dir / f"{u.id}.json").write_bytes(src.read_bytes())
+        for ab in u.unit_abilities:
+            n_unit_abilities_by_type[ab.ability_type] = (
+                n_unit_abilities_by_type.get(ab.ability_type, 0) + 1
+            )
+
+    # Faction laws extracted up front so the Faction page emit can
+    # inline this faction's {{FactionLawTier}} + {{LawTreePosition}}
+    # rows. See D-033.
+    law_result = extract_laws(paths)
 
     # Factions (Data:Faction/<id>). Each page carries {{Faction}} +
     # {{Translation | type=faction | …}} + 20 inline
-    # {{Entry | type=FactionCityName | …}} rows for the city-name
-    # pool. See D-025 / D-026.
+    # {{Entry | type=FactionCityName | …}} rows + 5 {{FactionLawTier}}
+    # + N {{LawTreePosition}} rows. See D-025 / D-026 / D-033.
     factions = extract_factions(paths)
     n_factions = 0
     n_city_names = 0
     for f in factions:
-        page = emit_faction_page(f, corpus, resolver=resolver)
+        page = emit_faction_page(
+            f, corpus, resolver=resolver,
+            law_tiers=law_result.faction_tiers,
+            law_positions=law_result.tree_positions,
+        )
         (faction_dir / f"{f.id}.wiki.txt").write_text(page, encoding="utf-8")
         n_factions += 1
         n_city_names += len(f.city_names)
@@ -298,17 +315,35 @@ def cmd_extract(
         n_item_set_bonuses += sum(len(t.bonuses) for t in st.tiers)
         total_chars += len(page)
 
+    # Faction laws (Data:Law/<id>). 198 production + 34 test laws,
+    # 1-3 levels each. Per-level bonuses flow into the unified Bonus
+    # table with parent_type='law_level'. LawTreePosition + FactionLawTier
+    # rows are emitted on the parent Faction page. See D-033.
+    n_laws = 0
+    n_law_levels = 0
+    n_law_bonuses = 0
+    for law in law_result.laws:
+        page = emit_law_page(law, corpus, resolver=resolver)
+        (law_dir / f"{law.id}.wiki.txt").write_text(page, encoding="utf-8")
+        n_laws += 1
+        n_law_levels += len(law.levels)
+        n_law_bonuses += sum(len(lv.bonuses) for lv in law.levels)
+        total_chars += len(page)
+    n_law_positions = len(law_result.tree_positions)
+    n_law_tiers = len(law_result.faction_tiers)
+
     # Shared (hand-curated) Entry seed pages. Per-type top-level dirs
     # (data/<type>/); wiki pages land at Data:<PascalType>/<subtype>.
     # Cargo rows all write to the unified Entry table.
-    n_entries = 0
+    n_entries_by_type: dict[str, int] = {}
     for entry_type, subtype in iter_entry_seeds():
         type_dir = data_dir / entry_type
         type_dir.mkdir(parents=True, exist_ok=True)
         seed_page = emit_entry_page_from_seed(entry_type, subtype, corpus, resolver=resolver)
         (type_dir / f"{subtype}.wiki.txt").write_text(seed_page, encoding="utf-8")
-        n_entries += 1
+        n_entries_by_type[entry_type] = n_entries_by_type.get(entry_type, 0) + 1
         total_chars += len(seed_page)
+    n_entries = sum(n_entries_by_type.values())
 
     # Shared AttackPassive seed pages (Data:AttackPassive/<passive_id>).
     n_passives = 0
@@ -324,19 +359,35 @@ def cmd_extract(
     _write_meta(target, patch, len(result.units))
 
     elapsed = time.monotonic() - t3
+
+    # Compose unit-ability sub-readout: passives, actives, auras, etc.
+    # Order short-list by count desc for at-a-glance scan.
+    ab_parts = ", ".join(
+        f"{n} {kind.replace('_', ' ')}s"
+        for kind, n in sorted(n_unit_abilities_by_type.items(),
+                              key=lambda kv: -kv[1])
+    ) or "no abilities"
+    # Per-type entry-seed sub-readout (movement, creature_type, attack_archetype).
+    seed_parts = ", ".join(
+        f"{n} {t.replace('_', ' ')}"
+        for t, n in sorted(n_entries_by_type.items())
+    ) or "—"
+
     console.print(
         f"[green]Wrote in {elapsed:.1f}s -> {target} ({total_chars:,} chars):[/green]\n"
-        f"  {len(result.units)} unit pages\n"
-        f"  {n_factions} faction pages ({n_city_names} city-name entries)\n"
-        f"  {n_hero_classes} hero classes\n"
-        f"  {n_heroes} heroes\n"
-        f"  {n_hero_specs} hero specializations ({n_spec_bonuses} bonus rows)\n"
-        f"  {n_hero_sub_classes} hero sub-classes ({n_sub_class_bonuses} bonus rows)\n"
-        f"  {n_spells} spells ({n_spell_ranks} rank rows)\n"
+        f"  {n_factions} factions ({n_city_names} city-name entries)\n"
+        f"  {n_laws} laws ({n_law_levels} levels, {n_law_bonuses} bonus rows; "
+        f"{n_law_positions} tree positions, {n_law_tiers} faction-tier rows)\n"
         f"  {n_artifacts} artifacts ({n_artifact_bonuses} bonus rows)\n"
         f"  {n_item_sets} item sets ({n_item_set_tiers} tiers, {n_item_set_bonuses} bonus rows)\n"
-        f"  {n_entries} curated entry seeds\n"
-        f"  {n_passives} attack-passive seeds"
+        f"  {len(result.units)} units ({ab_parts})\n"
+        f"  {n_passives} attack-passive seeds\n"
+        f"  {n_hero_classes} hero classes\n"
+        f"  {n_hero_sub_classes} hero sub-classes ({n_sub_class_bonuses} bonus rows)\n"
+        f"  {n_heroes} heroes\n"
+        f"  {n_hero_specs} hero specializations ({n_spec_bonuses} bonus rows)\n"
+        f"  {n_spells} spells ({n_spell_ranks} rank rows)\n"
+        f"  {n_entries} curated entry seeds ({seed_parts})"
     )
 
 

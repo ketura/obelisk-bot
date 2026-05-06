@@ -370,6 +370,7 @@ def render_translation_block(
     magic_json: dict[str, Any] | None = None,
     set_json: dict[str, Any] | None = None,
     artifact_json: dict[str, Any] | None = None,
+    law_json: dict[str, Any] | None = None,
 ) -> str:
     """Render a single ``{{Translation | …}}`` template invocation.
 
@@ -397,13 +398,13 @@ def render_translation_block(
             params[f"{code}_name"] = _lookup_text(
                 name_sid, lang_dir, corpus, resolver, unit_json, ability_json,
                 spec_json=spec_json, magic_json=magic_json, set_json=set_json,
-                artifact_json=artifact_json,
+                artifact_json=artifact_json, law_json=law_json,
             )
         if desc_sid:
             params[f"{code}_desc"] = _lookup_text(
                 desc_sid, lang_dir, corpus, resolver, unit_json, ability_json,
                 spec_json=spec_json, magic_json=magic_json, set_json=set_json,
-                artifact_json=artifact_json,
+                artifact_json=artifact_json, law_json=law_json,
             )
 
     return render_call("Translation", params, key_order=_TRANSLATION_FIELD_ORDER)
@@ -650,6 +651,7 @@ def _lookup_text(
     magic_json: dict[str, Any] | None = None,
     set_json: dict[str, Any] | None = None,
     artifact_json: dict[str, Any] | None = None,
+    law_json: dict[str, Any] | None = None,
 ) -> str | None:
     if not sid:
         return None
@@ -661,6 +663,7 @@ def _lookup_text(
             sid, raw, unit_json,
             lang=lang, ability_json=ability_json, spec_json=spec_json,
             magic_json=magic_json, set_json=set_json, artifact_json=artifact_json,
+            law_json=law_json,
         )
     return html_to_wiki(raw)
 

@@ -301,13 +301,15 @@ _BONUS_FIELD_ORDER: tuple[str, ...] = (
     "upgrade_increment", "upgrade_level_step",
     "receivers",
     "battle_type", "receiver_role", "receiver_allegiance",
+    "action_area", "fraction",
 )
 
 
 def render_bonus(b: Bonus) -> str:
     """Per D-031: render one bonus row into the unified Bonus table.
-    Used by hero specs, hero sub-classes, items, and any future
-    entity carrying the (type, parameters, upgrade) shape."""
+    Used by hero specs, hero sub-classes, items, item-set tiers,
+    and law-levels (D-032). Sparse fields are emitted only when
+    populated."""
     params: dict[str, Any] = {
         "parent_type": b.parent_type,
         "parent_id": b.parent_id,
@@ -329,6 +331,10 @@ def render_bonus(b: Bonus) -> str:
         params["receiver_role"] = b.receiver_role
     if b.receiver_allegiance is not None:
         params["receiver_allegiance"] = b.receiver_allegiance
+    if b.action_area is not None:
+        params["action_area"] = b.action_area
+    if b.fraction is not None:
+        params["fraction"] = b.fraction
     return render_call("Bonus", params, key_order=_BONUS_FIELD_ORDER)
 
 

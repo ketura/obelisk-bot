@@ -39,6 +39,7 @@ _DIR_TO_WIKI_TABLE: dict[str, str] = {
     "spells": "Spell",
     "artifacts": "Artifact",
     "item_sets": "ItemSet",
+    "laws": "Law",
     "attack_archetype": "AttackArchetype",
     "movement": "Movement",
     "creature_type": "CreatureType",

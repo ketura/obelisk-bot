@@ -112,6 +112,17 @@ class Interpreter:
             env[target] = v
             return v is not None
 
+        if op == "CurrentFractionLawConfig":
+            # Reads bonuses[N].parameters[M] etc. from the per-level
+            # law dict (one element of parametersPerLevel). Caller
+            # passes law_json = parametersPerLevel[level-1] directly.
+            if len(args) < 2: return False
+            target, path = args[0], args[1]
+            v = self._read_path(context.get("law_json"), path)
+            if v is None and _looks_numeric_config(path): v = _numeric_default(path)
+            env[target] = v
+            return v is not None
+
         if op in ("CurrentMagicBattle", "CurrentMagicWorld"):
             if len(args) < 2: return False
             target, path = args[0], args[1]
