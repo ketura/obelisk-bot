@@ -4,7 +4,7 @@ Heroes of Might and Magic: Olden Era — wiki data pipeline.
 
 Extracts game JSON from `Core.zip`, normalizes it into canonical records, emits Cargo stub articles for MediaWiki, diffs against prior releases, and uploads changes via the MediaWiki API.
 
-The wiki ([oldenera.wiki.gg](https://oldenera.wiki.gg/)) is the consumer. This project's deliverable is the **shared context** — the structured data layer. Display articles, infobox templates, and prose are out of scope and live on the wiki side.
+The [official wiki](https://wiki.hoodedhorse.com/Heroes_of_Might_and_Magic_Olden_Era/Main_Page) is the consumer. This project's deliverable is the **shared context** — the structured data layer. Display articles, infobox templates, and prose are out of scope and live on the wiki side.
 
 ## Status
 
