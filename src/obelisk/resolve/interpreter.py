@@ -7,6 +7,7 @@ import re
 from typing import Any
 
 from obelisk.resolve.buffs import BuffIndex
+from obelisk.resolve.hero_abilities import HeroAbilityIndex
 from obelisk.resolve.obstacles import ObstacleIndex
 from obelisk.resolve.scripts import Function, ScriptRegistry, Statement
 from obelisk.resolve.side_buffs import SideBuffIndex
@@ -44,12 +45,14 @@ def _numeric_default(path: str) -> float:
 
 
 class Interpreter:
-    def __init__(self, registry, buffs=None, obstacles=None, side_buffs=None, traps=None):
+    def __init__(self, registry, buffs=None, obstacles=None, side_buffs=None,
+                 traps=None, hero_abilities=None):
         self.registry = registry
         self.buffs = buffs
         self.obstacles = obstacles
         self.side_buffs = side_buffs
         self.traps = traps
+        self.hero_abilities = hero_abilities
 
     def evaluate(self, func_name, context):
         fn = self.registry.get(func_name)
@@ -120,6 +123,65 @@ class Interpreter:
             target, path = args[0], args[1]
             v = self._read_path(context.get("law_json"), path)
             if v is None and _looks_numeric_config(path): v = _numeric_default(path)
+            env[target] = v
+            return v is not None
+
+        if op == "CurrentSkillParameter":
+            # Reads bonuses[N].parameters[M] etc. from the per-level
+            # skill dict (one element of parametersPerLevel). Caller
+            # passes skill_json = parametersPerLevel[level-1] directly.
+            # Mirrors CurrentFractionLawConfig.
+            if len(args) < 2: return False
+            target, path = args[0], args[1]
+            v = self._read_path(context.get("skill_json"), path)
+            if v is None and _looks_numeric_config(path): v = _numeric_default(path)
+            env[target] = v
+            return v is not None
+
+        if op == "CurrentSubSkill":
+            # Reads bonuses[N].parameters[M] etc. from a sub-skill's
+            # raw dict. Caller passes sub_skill_json = the sub-skill's
+            # source JSON record directly.
+            if len(args) < 2: return False
+            target, path = args[0], args[1]
+            v = self._read_path(context.get("sub_skill_json"), path)
+            if v is None and _looks_numeric_config(path): v = _numeric_default(path)
+            env[target] = v
+            return v is not None
+
+        if op == "CurrentSkillLevel":
+            # Returns the integer level of the skill being resolved.
+            # Used by skills like skill_faction_dungeon whose desc text
+            # scales linearly with mastery level.
+            if len(args) < 1: return False
+            target = args[0]
+            level = context.get("skill_level")
+            if level is None:
+                return False
+            try:
+                env[target] = int(level)
+            except (TypeError, ValueError):
+                return False
+            return True
+
+        if op == "DbAbility":
+            # DbAbility(target, ability_id, level, "json.path") — reads
+            # a path from the (ability_id, level) entry in the
+            # hero-abilities DB. ``level`` is 0-based here per the
+            # source script convention. Used by skill_faction_demons to
+            # walk through summon abilities to find spawn obstacles.
+            if len(args) < 4 or self.hero_abilities is None: return False
+            target, ability_arg, level_arg, path = args[0], args[1], args[2], args[3]
+            ability_id = self._resolve_operand(ability_arg, env)
+            level_val = self._resolve_operand(level_arg, env)
+            if not isinstance(ability_id, str): return False
+            try:
+                level_idx = int(float(level_val))
+            except (TypeError, ValueError):
+                return False
+            level_data = self.hero_abilities.get_level(ability_id, level_idx)
+            if level_data is None: return False
+            v = self._read_path(level_data, path)
             env[target] = v
             return v is not None
 

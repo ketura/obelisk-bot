@@ -1529,6 +1529,364 @@ filters cleanly via `WHERE Law.test = false`. They get
 out the nested-array problem: side tables + flattened tree
 positions handle it cleanly.
 
+## D-034 — City buildings: flatten per-level into a single `Building` table; defer category-specific extras
+
+**Date:** 2026-05-06
+**Status:** Locked.
+
+City building data lives under `DB/objects_logic/cities/<faction>_city.json` —
+six files, one per faction. Each city dict carries 18 building-group
+keys (mains, walls, magicGuilds, taverns, markets, graals, banks,
+hires, etc.) plus a `buildOrders` list. **178 source buildings, 206
+rows after per-level flatten.**
+
+**Source shape per building:** identity (`sid`, per-level `names[]` /
+`descriptions[]` / `narrativeDescriptions[]` / `icons[]` /
+`backgroundImages[]`), `parametersPerLevel[]` (each entry: `costs[]`
+list of `{name, cost}`, `prevBuildings[]` list of `{sid, level}`,
+`nodePos: {xPos, yPos}`), construction-state booleans, plus
+category-specific extras (`unitsHire` for dwellings, `rollChances`
+for guilds, `bonuses` for walls, market trade rates, etc.).
+
+**Resolution:** one unified `Building` table, one row per (faction,
+sid, level) triple. The source's `parametersPerLevel` array is
+**flattened on extract** rather than emitted as a side table —
+each level becomes its own row, and the row carries that level's
+name, desc, position, costs, prereqs.
+
+**`id` synthesis:** `<faction>_<sid>_L<level>` (e.g.
+`human_Build_Main_L1`). Building SIDs reuse across factions (every
+faction has a `Build_Main`), so the faction prefix is required for
+global uniqueness.
+
+**Costs as fixed columns, prereqs as a Cargo `List`:** since the set
+of resources is small and static (gold/wood/ore/crystals/gemstones/
+mercury/dust/graal — eight observed in the corpus), each gets its
+own optional column on Building (`gold_cost`, `wood_cost`, etc.),
+NULL when not required at that level. Prereqs go into a
+`List (,) of String` column with values formatted as
+`<sid>_L<level>` — Cargo's `HOLDS` operator handles "what
+buildings unlock at Build_Main_L2" cleanly.
+
+**`unitsHire` collapsed:** for `category='hires'` rows we extract
+`units_hire_sid` (the base unit SID from `unitsHire.units[0].sids[0]`)
+and `units_weekly` (`weeklyIncrement`). The upg / upg_alt variants
+chain via the existing Unit table joins; no need to denormalize them.
+
+**Construction-state at level 1 only:** `is_constructed_on_start`,
+`level_on_start`, `scene_slot` describe the building as a whole, not
+the level. Populated only on the level-1 row, NULL on higher levels.
+Wiki queries like "what buildings start built" filter naturally on
+`level=1 AND is_constructed_on_start=true`.
+
+**Translation per row:** one `{{Translation | type=building |
+target_id=<id>}}` per Building row. Yes, this is some redundancy —
+some per-level localized strings are nearly identical to others —
+but it preserves accuracy (per-level English text really does vary)
+and matches the SpellRankTranslation pattern (per-level Translation
+rows post-flatten).
+
+**Deliberately not extracted:** `bonusesPerLevel`,
+`optionalEffectsPerLevel`, magic-guild `rollChances`, wall `bonuses`,
+market `extraChargePurchase` / `extraChargeSell` / `numberPurchases`
+/ `resArr`, training `trainingStats`, unitsConverter
+`conversionPairs`, artifactMarket `artifacts` / `itemsCountPerRarity`
+/ `levelStep`, graal `graalType`. Each would need its own side table
+and the wiki value-to-effort ratio is currently low. Future work
+when player-facing wiki queries demand them.
+
+**`buildOrders` skipped:** ten per faction = sixty preset
+build-orders used by AI / random map generation. Not actual
+buildings, no name / desc / cost. Noted for hypothetical future
+`BuildingPreset` table if needed.
+
+**Considered and rejected:**
+- **Per-category tables** (`Wall`, `Dwelling`, `MagicGuild`, etc.).
+  Most categories share the same core shape; the irregular fields
+  are deferred anyway. Per the consolidated-table pattern (D-024,
+  D-026, D-031, D-033), one unified `Building` table beats 18.
+- **Cost as a single string column** (`costs="gold:5000;wood:5;ore:5"`).
+  Loses scalar query support ("WHERE gold_cost > 5000" becomes a
+  string regex). Eight columns isn't proliferation.
+- **Prereqs as a separate `BuildingPrereq(building_id, prereq_sid,
+  prereq_level)` side table.** More normalized but requires a join
+  for the most common query ("what does this building unlock"),
+  which `HOLDS` handles inline. Cargo's first-class List support
+  makes the inline form genuinely clean rather than a hack.
+- **Keep parametersPerLevel as nested rows** (`Building` + `BuildingLevel`).
+  Flattening is simpler and the wiki-side queries don't lose
+  anything: filter on `sid` for all levels, or `(sid, level)` for
+  one specific tier.
+
+**Code shape:**
+- `models/building.py` (new): `BuildingRecord`,
+  `BuildingExtractionResult`.
+- `extract/building.py` (new): `extract_buildings` walks
+  `objects_logic/cities/*_city.json`, iterates the 18 building-group
+  keys (skips `buildOrders`), flattens `parametersPerLevel` into one
+  record per level. ~50 lines net.
+- `emit/building.py` (new): `emit_building_page`. One `{{Building}}`
+  row + one `{{Translation | type=building}}` row per page.
+
+## D-035 — Adventure-map structures: one unified `MapObject` table; defer rich category-specific payloads
+
+**Date:** 2026-05-06
+**Status:** Locked.
+
+`DB/objects_logic/` ships ~30 source folders covering everything
+players interact with on the overworld map: resource piles, mines,
+creature dwellings, banks, chests, taverns, markets, portals,
+shrines, unique map specials. ~287 entries total. The shapes vary
+wildly per category — chests carry `variants` (loot tables),
+event_banks carry encounter+reward variants, hires carry
+`unitsData` weekly-increment blocks, mines carry `resArr` chance
+tables, magic_mines carry `bonuses`, markets carry trade-rate
+fields. Most are one-off shapes that don't generalize cleanly.
+
+**Resolution:** one unified `MapObject` Cargo table with a generic
+core schema, deferring per-category rich payloads. The single
+high-signal escape hatch on every row is `source_path`, pointing
+editors at the raw JSON when the wiki doesn't yet surface what
+they need.
+
+**Source folders included** (~22 → ~118 rows in 2026-05-05): res,
+res_mines, magic_mines, hires, chests, event_banks, taverns,
+markets, item_markets, res_trade_labs, unit_res_trade_labs,
+outposts, garrisons, portals, sacrificial_shrine, fickle_shrines,
+mirages, insaras_eye, eternal_dragon, pocket_dimensions,
+chimerologist, prisons.
+
+**Source folders excluded:**
+- `cities` — modeled in [`Building`](Building.md) (D-034).
+- `items` — placement metadata for artifacts; canonical Artifact
+  data lives in the Artifact table (D-031).
+- `blocks`, `todo` — terrain blockers + dev TODOs.
+- `random_hires`, `unit_upgrades`, `town_gates`,
+  `win_condition_objects` — generation/AI helpers and
+  campaign-specific mechanics.
+- `field_objects/obstacles`, `field_objects/sentries`,
+  `field_objects/traps` — battlefield-side, separate work item.
+
+**Schema highlights:**
+- `id` — source id, already globally unique.
+- `category` — source folder name; primary discriminator for
+  filtering ("all dwellings" → `WHERE category='hires'`).
+- `name_sid` / `desc_sid` / `narrative_desc_sid` — convention is
+  `<id>_name` / `<id>_description` / `<id>_narrativeDescription`
+  in `Lang/<locale>/texts/mapObjects.json`. ~90 of the 118 rows
+  carry these; the rest (single-instance specials like `tavern`,
+  `outposts`, `eternal_dragon`) just rely on category for
+  identification.
+- Universal scalars (sparse): `goods_value`, `ai_value`,
+  `custom_guard_value`, `view_radius`, `ai_ignore`.
+- `guard_units` — Cargo `List` of `<unit_sid>:<amount>` strings;
+  `HOLDS`-friendly.
+- Four sparse high-signal category fields: `fraction` + `tier`
+  for hires (creature dwellings on the adventure map — *not* the
+  city `Build_Tier_*` dwellings, which live on Building);
+  `resource_name` + `resource_value` for `res_mines` and selected
+  `res` rows.
+- `source_path` — universal pointer to the source JSON.
+
+**Considered and rejected:**
+- **Per-category tables.** 22 categories each with a slightly
+  different shape; doing this properly means 22 schemas + 22
+  emit pipelines. The wiki value is concentrated in the
+  generic display fields; the niche per-category data is better
+  served by a single deferred-side-tables follow-up than by
+  fragmenting the entry catalog upfront.
+- **Generic `extra_json` blob column** for the deferred payloads.
+  Loses Cargo's query-by-column property; Cargo doesn't index
+  inside JSON. The `source_path` pointer is a cleaner punt.
+- **Including `field_objects/`** in the same pass. They're
+  battlefield-side (used during combat) rather than overworld;
+  schema overlap is low. Separate work item when battlefield gets
+  its first table.
+
+**Code shape:**
+- `models/map_object.py` (new): `MapObjectRecord`,
+  `MapObjectExtractionResult`.
+- `extract/map_object.py` (new): `extract_map_objects`. One pass
+  over the 22 in-scope source folders; pre-loads the
+  `mapObjects.json` SID set so per-row name/desc fields populate
+  only when the L10n entries actually exist.
+- `emit/map_object.py` (new): `emit_map_object_page`.
+  ``{{MapObject}}`` + (when name SIDs exist) ``{{Translation |
+  type=map_object}}`` per page.
+
+**Future work** (not blocking this pass):
+- Per-category side tables for the deferred rich payloads:
+  `MapObjectChestVariant` (loot rolls), `MapObjectEventBankReward`
+  (visit outcomes), `MapObjectDwellingUnit` (which units recruited
+  from `hires`), `MapObjectMineBonus` (magic_mine effects),
+  `MapObjectMarketTrade` (rates).
+- `BuildingPreset` table for the `buildOrders` data we skipped in
+  D-034.
+- `field_objects/*` (obstacles, sentries, traps) — battlefield
+  scope.
+
+## D-037 — Hero skills + sub-skills: per-(skill, level) flattening; sub-skills inlined on parent skill page; orphan catch-all
+
+**Date:** 2026-05-07
+**Status:** Locked.
+
+`DB/heroes_skills/` ships skills + sub-skills across four variants
+each: production (the live game), arena, campaign, and pseudo
+(for skills) / test (for sub-skills). 102 skills total
+(30 production + 12 pseudo + 30 arena + 30 campaign) with 1-3
+mastery levels apiece (342 SkillLevel rows total). 617 sub-skills
+total (203 production + 203 arena + 203 campaign + 8 test).
+
+Skills carry a `parametersPerLevel` array — same per-level
+flattening pattern as Building (D-034) and Law (D-033). Each level
+carries its own optional name/desc/icon override, the bonuses that
+take effect at that level, and a `subSkills[]` list of sub-skill
+ids the player can pick at that level. Sub-skills themselves are
+flat (no levels), each carrying identity + bonuses.
+
+**Resolution:** three Cargo tables sharing the unified `Bonus`
+table.
+
+- `Skill` — top-level skill identity. id, variant, skill_type
+  (Common / Class / Faction; null for pseudo), is_pseudo, name +
+  desc SIDs (cargo-resolved English mirrors), max_level,
+  source_path.
+- `SkillLevel` — one row per (skill, level), 1-based. skill_id,
+  level, optional level-specific name/desc/icon overrides,
+  offered_sub_skills (Cargo `List (,) of String` of the sub-skill
+  ids unlocked at this level — `HOLDS`-friendly).
+- `SubSkill` — flat sub-skill ("perk") record. id, variant,
+  parent_skill_id (recovered by scanning every skill level's
+  `subSkills[]` list), name + desc SIDs, icon, source_path.
+
+Bonuses flow through the unified `Bonus` table:
+- Skill-level bonuses use `parent_type='skill_level'` with
+  `parent_id='<skill_id>_L<level>'` (640 rows in 2026-05-05).
+- Sub-skill bonuses use `parent_type='sub_skill'` with
+  `parent_id='<sub_skill_id>'` (996 rows).
+
+Translations follow D-026:
+- `{{Translation | type=skill}}` for the shared skill name/desc.
+- `{{SkillLevelTranslation}}` per level for the per-level overrides.
+- `{{Translation | type=sub_skill}}` per sub-skill.
+
+**Page layout — sub-skills inlined on parent.** Each
+`Data:Skill/<skill_id>` page is self-contained: top-level Skill
+row + per-level SkillLevel/SkillLevelTranslation/Bonus rows,
+followed by every SubSkill (+ its Translation + its bonuses)
+referenced by any level's `subSkills[]` list. Reasoning: sub-skills
+are a strict 1:1 *subset-of* relationship with their parent skill
+(unlike hero specializations, which we found to be 35-of-122
+shared across heroes — see this session's HeroSpec investigation).
+Inlining keeps the wiki page count manageable (~95 instead of ~600+)
+and puts everything an editor needs for a skill on one page.
+
+**Orphan sub-skills.** 77 sub-skills are not referenced by any
+skill's `subSkills[]` list — 8 test entries (`sub_skill_marchOfWar`
+and friends from `sub_skills_test.json`) plus ~69 arena legacy
+`*_old` entries that survive in `sub_skills_arena.json` but no
+longer match any current arena skill's level offerings. Rather
+than 77 individual stub pages, these emit onto a single
+catch-all page `Data:Skill/_orphan_sub_skills` with the same
+SubSkill + Translation + Bonus row shape.
+
+**Considered and rejected:**
+- **Per-sub-skill pages.** 617 separate pages bloats the namespace
+  with content that's only meaningful in the context of its
+  parent skill's tree. Inlining mirrors how players actually
+  encounter sub-skills (picking from a skill's level offering).
+- **Per-level subskill_offers side table.** Captured as
+  `offered_sub_skills` Cargo `List` column on `SkillLevel`
+  instead — same query power (`HOLDS 'sub_skill_x'`) without a
+  separate table. Matches D-027's `start_skills` / `start_magics`
+  pattern.
+- **Skills_by_level pool tables** (per-class skill offering tables
+  from `DB/heroes_skills/skills_by_level/` — knight gets these
+  skills at level 1, etc.). User opted to skip this pass: useful
+  on the wiki eventually, unclear whether it belongs as Cargo
+  data or as hand-curated wiki text. Decision deferred until a
+  concrete display use case surfaces.
+
+**Code shape:**
+- `models/skill.py` (new): `SkillRecord`, `SkillLevelRecord`,
+  `SubSkillRecord`, `SkillExtractionResult`.
+- `extract/skill.py` (new): `extract_skills`. Two-pass —
+  first walks `DB/heroes_skills/skills/*.json` building the
+  `(sub_skill_id → parent_skill_id)` map by scanning each level's
+  `subSkills[]`; second walks `DB/heroes_skills/sub_skills/*.json`
+  attaching parent_skill_id when known.
+- `emit/skill.py` (new): `emit_skill_page` (per-skill page with
+  inlined sub-skills) + `emit_orphan_sub_skills_page` (catch-all).
+
+**Future work** (not blocking this pass):
+- `skills_by_level` per-class skill offering tables (deferred per
+  user discussion — 6 hero-class files describing which skills
+  show up at which level, currently not data-imported).
+- `weeks/months` mechanic + `difficulties.json` — flagged in the
+  Core audit as the next two extract candidates after skills.
+- `reward_golden_egg` — 98-entry reward roll table; surfaced when
+  someone asked about it on the wiki, currently not surfaced.
+
+## D-038 — Astrologist weeks + months: one unified `AstrologistEvent` table
+
+**Date:** 2026-05-07
+**Status:** Locked.
+
+`DB/weeks/weeks.json` (15 entries) and `DB/weeks/months.json` (11 entries) carry the periodically-rolled global modifiers the in-game Astrologer announces — "Week of Sorcery", "Month of the Locust", and so on. The two file shapes are identical: each entry has `id` / `icon` / `name` (SID) / `desc` (SID) / `buffSid` (pointer to the actual buff applied while the event is active). `DB/weeks_info.json` adds a per-event `rollChance` and the global `countToReturnWeek` / `countToReturnMonth` thresholds for re-rolling.
+
+**Resolution:** one unified `AstrologistEvent` Cargo table with a `category=week|month` discriminator, mirroring the MapObject (D-035) pattern of "one schema, category column" rather than two near-identical tables.
+
+**Schema highlights:**
+- `id` — source id (e.g. `astrologist_week_1`, `astrologist_month_3`).
+- `category` — `week` or `month`.
+- `name_sid` / `desc_sid` — L10n keys; resolve cleanly with no `{N}` placeholders (every event ships static text in all 16 languages).
+- `icon` — sprite id.
+- `buff_sid` — pointer at a `DB/buffs/` entry carrying the actual mechanical effect (not extracted here — the player-facing description on the event already covers the gameplay impact).
+- `roll_chance` — weight in the random-pick table from `weeks_info.json`. Per-event scalar.
+- `count_to_return` — global re-roll threshold (`countToReturnWeek` / `countToReturnMonth`). The same value across the whole category, but stored per-row so queries don't need a join.
+- `source_path` — universal pointer.
+
+A `{{Translation | type=astrologist_event | …}}` row carries name+desc in all 16 languages.
+
+**Considered and rejected:**
+- **Two separate tables** (`Week` + `Month`). Same-shape data with one discriminator field — splitting just doubles the schema for no query benefit.
+- **Extending the unified `Entry` table** with `buff_sid` + `roll_chance` columns. Those fields aren't shared with any other Entry-domain row, and Entry is meant to be the "lightweight catch-all"; AstrologistEvent earns its own table because it has structured side-channel data.
+- **Inlining the buff data** (`actions[]`, etc. from `DB/buffs/`). The buffs live in a heterogeneous DB used by many other systems; adding a side table for buff details belongs to a separate "battle effects catalog" pass when battlefield tables come online.
+
+**Code shape:**
+- `models/astrologist_event.py` (new): `AstrologistEventRecord`, `AstrologistEventExtractionResult`.
+- `extract/astrologist_event.py` (new): `extract_astrologist_events`. Loads `weeks_info.json` first for the chance/return maps, then walks weeks.json + months.json appending records.
+- `emit/astrologist_event.py` (new): `emit_astrologist_event_page`.
+
+## D-039 — Difficulty: dedicated table, flattened resource columns, raw description text
+
+**Date:** 2026-05-07
+**Status:** Locked.
+
+`DB/difficulties.json` ships 5 entries (`Easy`/`Normal`/`Hard`/`Expert`/`Impossible`) carrying per-side starting-resource buckets and a `neutralPowerMultiplier` global scalar (the multiplier applied to adventure-map encounter strength). The two sibling files `difficulties_lobby.json` and `difficulties_lobby_solo.json` exist but ship empty `difficultiesConfigs` arrays in 2026-05-05.
+
+**Resolution:** dedicated `Difficulty` Cargo table, 5 rows. Per-side resources flatten to `player_<resource>` and `ai_<resource>` columns since the resource set is fixed (gold / wood / ore / gemstones / crystals / mercury / dust). The source key `alchemicalDust` is normalized to `dust` to match the canonical naming in `DB/res/resources_info.json`.
+
+**Source-data quirks (preserved as-is):**
+- `nameSid` values like `EasyDifficultySid` are *not* L10n entries — they don't resolve in any `Lang/<locale>/` file. Stored on the row for fidelity but the canonical display name is the `id` itself.
+- `descriptionSid` carries literal English text ("This is an Easy difficulty setting."), not a SID. Stored as a plain `description` string column.
+
+Because of those two quirks, the `Difficulty` table doesn't carry a `{{Translation}}` companion — the source ships in English only and the descriptions are clearly placeholder text awaiting a real localization pass. When/if real SIDs land, this becomes a follow-up task.
+
+**Considered and rejected:**
+- **Inlining into the `Entry` table** as `type=difficulty`. The shape is too rich (15 numeric columns plus a multiplier) and too domain-specific to belong in the unified catch-all.
+- **Treating `nameSid` as a resolvable SID** with empty-result fallback. The values don't follow the L10n SID naming convention used elsewhere; they're internal engine identifiers. Storing as opaque is more honest.
+- **Splitting per-side resources into a side table** (one row per side per difficulty). With a fixed resource shape and only 5 difficulties, the join overhead isn't worth it; flat is fine.
+
+**Code shape:**
+- `models/difficulty.py` (new): `DifficultyRecord`, `DifficultyExtractionResult`.
+- `extract/difficulty.py` (new): `extract_difficulties`. Walks all three difficulty files; lobby variants currently yield 0 rows.
+- `emit/difficulty.py` (new): `emit_difficulty_page` — single `{{Difficulty}}` row, no Translation block.
+
+**Future work** (not blocking this pass):
+- Real `Translation` row when source-side L10n materializes.
+- AI-side difficulty knobs that may land in lobby variants once those fill out.
+
 ## Open questions / known unknowns
 
 

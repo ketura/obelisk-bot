@@ -6,6 +6,10 @@ from obelisk.models.common import (
     Sid,
     SidRef,
 )
+from obelisk.models.difficulty import (
+    DifficultyExtractionResult,
+    DifficultyRecord,
+)
 from obelisk.models.faction import FactionRecord
 from obelisk.models.hero import (
     Bonus,
@@ -26,6 +30,14 @@ from obelisk.models.artifact import (
     ArtifactExtractionResult,
     ArtifactRecord,
 )
+from obelisk.models.astrologist_event import (
+    AstrologistEventExtractionResult,
+    AstrologistEventRecord,
+)
+from obelisk.models.building import (
+    BuildingExtractionResult,
+    BuildingRecord,
+)
 from obelisk.models.item_set import (
     ItemSetExtractionResult,
     ItemSetRecord,
@@ -37,6 +49,16 @@ from obelisk.models.law import (
     LawLevelRecord,
     LawRecord,
     LawTreePositionRecord,
+)
+from obelisk.models.map_object import (
+    MapObjectExtractionResult,
+    MapObjectRecord,
+)
+from obelisk.models.skill import (
+    SkillExtractionResult,
+    SkillLevelRecord,
+    SkillRecord,
+    SubSkillRecord,
 )
 from obelisk.models.spell import (
     SpellExtractionResult,
@@ -60,8 +82,14 @@ __all__ = [
     "SUPPORTED_LANGUAGES",
     "ArtifactExtractionResult",
     "ArtifactRecord",
+    "AstrologistEventExtractionResult",
+    "AstrologistEventRecord",
     "AttackSlot",
     "Bonus",
+    "BuildingExtractionResult",
+    "BuildingRecord",
+    "DifficultyExtractionResult",
+    "DifficultyRecord",
     "Faction",
     "FactionLawTierRecord",
     "FactionRecord",
@@ -86,12 +114,18 @@ __all__ = [
     "LawTreePositionRecord",
     "LocalizationCorpus",
     "LocalizationEntry",
+    "MapObjectExtractionResult",
+    "MapObjectRecord",
     "ResourceCost",
     "Sid",
     "SidRef",
+    "SkillExtractionResult",
+    "SkillLevelRecord",
+    "SkillRecord",
     "SpellExtractionResult",
     "SpellRankRecord",
     "SpellRecord",
+    "SubSkillRecord",
     "Unit",
     "UnitAbility",
     "UnitAttack",

@@ -5,9 +5,12 @@ extra structure**. Every row carries:
 
 - a **type** + **subtype** primary key
 - a player-facing **display_name** + **description** (English defaults)
-- the canonical L10n **name_sid** + **desc_sid** the row was sourced
-  from
+- an optional **narrative_description** for flavor/lore text (D-036)
+- the canonical L10n **name_sid** + **desc_sid** + optional
+  **narrative_description_sid** the row was sourced from
 - an optional **icon** filename
+- a **source_path** pointer to the L10n file (or source JSON for
+  per-patch extracts) the row came from (D-036)
 - 15 × per-language **`<lang>_name`** + **`<lang>_desc`** columns
 
 This table is the catch-all for any reference data that fits the
@@ -33,13 +36,16 @@ corpus on every extract, so per-patch text changes flow through.
 
 ```mediawiki
 {{#cargo_declare:_table=Entry
-| type = String (allowed values=attack_archetype,movement,creature_type,FactionCityName)
+| type = String (allowed values=attack_archetype,movement,creature_type,FactionCityName,resource,hero_stat,unit_stat)
 | subtype = String
 | display_name = String
 | description = Wikitext
+| narrative_description = Wikitext
 | icon = String
 | name_sid = String
 | desc_sid = String
+| narrative_description_sid = String
+| source_path = String
 
 <!-- Per-language pairs. Each language gets a name + desc column. -->
 | pt_br_name = String

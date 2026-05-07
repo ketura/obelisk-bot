@@ -22,6 +22,7 @@ from typing import Any
 from obelisk.models.localization import LocalizationCorpus
 from obelisk.resolve.args import ArgsIndex, load_args_index
 from obelisk.resolve.buffs import BuffIndex, load_buff_index
+from obelisk.resolve.hero_abilities import HeroAbilityIndex, load_hero_ability_index
 from obelisk.resolve.interpreter import Interpreter
 from obelisk.resolve.obstacles import ObstacleIndex, load_obstacle_index
 from obelisk.resolve.scripts import ScriptRegistry
@@ -55,12 +56,16 @@ class PlaceholderResolver:
         set_json: dict[str, Any] | None = None,
         artifact_json: dict[str, Any] | None = None,
         law_json: dict[str, Any] | None = None,
+        skill_json: dict[str, Any] | None = None,
+        sub_skill_json: dict[str, Any] | None = None,
+        skill_level: int | None = None,
     ) -> str:
         if not text:
             return text or ""
         return self._resolve_inner(
             sid, text, unit_json, lang, ability_json, spec_json, magic_json,
-            set_json, artifact_json, law_json, _seen=set(),
+            set_json, artifact_json, law_json, skill_json, sub_skill_json,
+            skill_level, _seen=set(),
         )
 
     def _resolve_inner(
@@ -75,6 +80,9 @@ class PlaceholderResolver:
         set_json: dict[str, Any] | None,
         artifact_json: dict[str, Any] | None,
         law_json: dict[str, Any] | None,
+        skill_json: dict[str, Any] | None,
+        sub_skill_json: dict[str, Any] | None,
+        skill_level: int | None,
         _seen: set[str],
     ) -> str:
         args = self.args_index.get(sid)
@@ -89,10 +97,14 @@ class PlaceholderResolver:
             "set_json": set_json or {},
             "artifact_json": artifact_json or {},
             "law_json": law_json or {},
+            "skill_json": skill_json or {},
+            "sub_skill_json": sub_skill_json or {},
+            "skill_level": skill_level,
         }
         values = self._evaluate_args(
             args, ctx, unit_json, lang, ability_json, spec_json, magic_json,
-            set_json, artifact_json, law_json, _seen,
+            set_json, artifact_json, law_json, skill_json, sub_skill_json,
+            skill_level, _seen,
         )
 
         def sub(match: re.Match[str]) -> str:
@@ -116,6 +128,9 @@ class PlaceholderResolver:
         set_json: dict[str, Any] | None,
         artifact_json: dict[str, Any] | None,
         law_json: dict[str, Any] | None,
+        skill_json: dict[str, Any] | None,
+        sub_skill_json: dict[str, Any] | None,
+        skill_level: int | None,
         _seen: set[str],
     ) -> list[str | None]:
         values: list[str | None] = []
@@ -123,7 +138,8 @@ class PlaceholderResolver:
             values.append(
                 self._eval_expr(arg_name, ctx, unit_json, lang, ability_json,
                                 spec_json, magic_json, set_json, artifact_json,
-                                law_json, _seen)
+                                law_json, skill_json, sub_skill_json,
+                                skill_level, _seen)
             )
         return values
 
@@ -139,6 +155,9 @@ class PlaceholderResolver:
         set_json: dict[str, Any] | None,
         artifact_json: dict[str, Any] | None,
         law_json: dict[str, Any] | None,
+        skill_json: dict[str, Any] | None,
+        sub_skill_json: dict[str, Any] | None,
+        skill_level: int | None,
         _seen: set[str],
     ) -> str | None:
         """Evaluate one args-side expression.
@@ -167,7 +186,8 @@ class PlaceholderResolver:
             alt_sid = alt_sid.strip()
             left_val = self._eval_expr(
                 left_expr, ctx, unit_json, lang, ability_json,
-                spec_json, magic_json, set_json, artifact_json, law_json, _seen
+                spec_json, magic_json, set_json, artifact_json, law_json,
+                skill_json, sub_skill_json, skill_level, _seen
             )
             if self.corpus is None:
                 return left_val
@@ -194,7 +214,8 @@ class PlaceholderResolver:
                     continue
                 sub_map[j] = self._eval_expr(
                     alt_args[k], ctx, unit_json, alt_lang, ability_json,
-                    spec_json, magic_json, set_json, artifact_json, law_json, sub_seen
+                    spec_json, magic_json, set_json, artifact_json, law_json,
+                    skill_json, sub_skill_json, skill_level, sub_seen
                 )
 
             def _sub(m: re.Match[str]) -> str:
@@ -213,7 +234,7 @@ class PlaceholderResolver:
                 return self._resolve_inner(
                     expr, sub_text, unit_json, lang, ability_json,
                     spec_json, magic_json, set_json, artifact_json, law_json,
-                    _seen | {expr}
+                    skill_json, sub_skill_json, skill_level, _seen | {expr}
                 )
         return None
 
@@ -240,12 +261,21 @@ def build_resolver(
     buffs = load_buff_index(core_root / "DB" / "buffs")
     obstacles = load_obstacle_index(core_root / "DB" / "field_objects" / "obstacles")
     side_buffs = load_side_buff_index(core_root / "DB" / "side_buffs")
+    # Sub-skill bonus chains (e.g. skill_formation: side-buff-info →
+    # sid → unit-buff DB entry → actions[0].damageDealer.buff.sid)
+    # need DbSideBuff to fall back to the unit-buff DB when the
+    # resolved sid isn't in side_buff_base.
+    side_buffs.attach_buff_fallback(buffs)
     traps = load_trap_index(core_root / "DB" / "field_objects" / "traps")
+    hero_abilities = load_hero_ability_index(
+        core_root / "DB" / "heroes_abilities" / "heroes_abilities_base"
+    )
     return PlaceholderResolver(
         args,
         Interpreter(
             registry, buffs=buffs, obstacles=obstacles,
             side_buffs=side_buffs, traps=traps,
+            hero_abilities=hero_abilities,
         ),
         corpus=corpus,
     )

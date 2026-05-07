@@ -27,7 +27,11 @@ from rich.table import Table
 
 from obelisk.emit import (
     emit_artifact_page,
+    emit_astrologist_event_page,
     emit_attack_passive_page,
+    emit_buildings_group_page,
+    emit_difficulty_page,
+    emit_entry_page,
     emit_entry_page_from_seed,
     emit_faction_page,
     emit_hero_class_page,
@@ -36,6 +40,9 @@ from obelisk.emit import (
     emit_hero_sub_class_page,
     emit_item_set_page,
     emit_law_page,
+    emit_map_object_page,
+    emit_orphan_sub_skills_page,
+    emit_skill_page,
     emit_spell_page,
     emit_unit_page,
     iter_entry_seeds,
@@ -43,12 +50,18 @@ from obelisk.emit import (
 from obelisk.extract import (
     CorePaths,
     extract_artifacts,
+    extract_astrologist_events,
+    extract_buildings,
+    extract_difficulties,
     extract_factions,
     extract_hero_specializations,
     extract_hero_sub_classes,
     extract_heroes,
     extract_item_sets,
     extract_laws,
+    extract_map_objects,
+    extract_resources,
+    extract_skills,
     extract_spells,
     extract_units_enriched,
     load_localization_corpus,
@@ -154,10 +167,16 @@ def cmd_extract(
     artifact_dir = data_dir / "artifacts"
     item_set_dir = data_dir / "item_sets"
     law_dir = data_dir / "laws"
+    building_dir = data_dir / "buildings"
+    map_object_dir = data_dir / "map_objects"
+    skill_dir = data_dir / "skills"
+    astrologist_event_dir = data_dir / "astrologist_events"
+    difficulty_dir = data_dir / "difficulties"
     attack_passive_dir = data_dir / "attack_passives"
     for d in (unit_dir, faction_dir, hero_class_dir, hero_dir, hero_spec_dir,
               hero_sub_class_dir, spell_dir, artifact_dir, item_set_dir,
-              law_dir, attack_passive_dir):
+              law_dir, building_dir, map_object_dir, skill_dir,
+              astrologist_event_dir, difficulty_dir, attack_passive_dir):
         d.mkdir(parents=True, exist_ok=True)
     # Per-type Entry dirs (data/<type>/) get created lazily inside the
     # entry loop below so the seed dict drives the directory layout.
@@ -332,6 +351,121 @@ def cmd_extract(
     n_law_positions = len(law_result.tree_positions)
     n_law_tiers = len(law_result.faction_tiers)
 
+    # City buildings. 206 Cargo rows total (flattened per faction + sid
+    # + level), but consolidated onto fewer pages per D-034 (revised):
+    #   * All `category='hires'` rows for a faction → one page
+    #     `<faction>_Build_creature_dwellings.wiki.txt`.
+    #   * Every other building → one page per (faction, sid),
+    #     e.g. `demon_Build_Main.wiki.txt` carrying all 3 levels.
+    # Most category-specific extras (rollChances, optionalEffectsPerLevel,
+    # market trade rates, etc.) are deliberately not extracted.
+    building_result = extract_buildings(paths)
+    n_buildings = len(building_result.buildings)
+    n_building_by_cat: dict[str, int] = {}
+    # Bucket key → list of BuildingRecord rows for that page.
+    building_buckets: dict[str, list] = {}
+    for b in building_result.buildings:
+        n_building_by_cat[b.category] = n_building_by_cat.get(b.category, 0) + 1
+        if b.category == "hires":
+            page_id = f"{b.faction}_Build_creature_dwellings"
+        else:
+            page_id = f"{b.faction}_{b.sid}"
+        building_buckets.setdefault(page_id, []).append(b)
+    n_building_pages = 0
+    for page_id, rows in building_buckets.items():
+        page = emit_buildings_group_page(rows, corpus, resolver=resolver)
+        (building_dir / f"{page_id}.wiki.txt").write_text(page, encoding="utf-8")
+        n_building_pages += 1
+        total_chars += len(page)
+
+    # Adventure-map structures (Data:MapObject/<id>). ~118 rows across
+    # ~22 source folders under DB/objects_logic/. Generic per D-035 —
+    # captures display fields, universal scalars, guard_units, plus
+    # a few sparse high-signal category-specific scalars. Rich payloads
+    # (chest variants, hire unitsData, mine bonuses, etc.) deferred.
+    map_object_result = extract_map_objects(paths)
+    n_map_objects = 0
+    n_map_object_by_cat: dict[str, int] = {}
+    for mo in map_object_result.map_objects:
+        page = emit_map_object_page(mo, corpus, resolver=resolver)
+        (map_object_dir / f"{mo.id}.wiki.txt").write_text(page, encoding="utf-8")
+        n_map_objects += 1
+        n_map_object_by_cat[mo.category] = n_map_object_by_cat.get(mo.category, 0) + 1
+        total_chars += len(page)
+
+    # Hero skills + sub-skills (Data:Skill/<skill_id>). 102 skills (30
+    # production + 12 pseudo + 30 arena + 30 campaign), each with 1-3
+    # levels. 617 sub-skills total (203+203+203+8). Each skill page
+    # carries its top-level Skill row + per-level SkillLevel +
+    # SkillLevelTranslation + Bonus rows, and inlines every sub-skill
+    # referenced by any of this skill's levels (SubSkill + Translation
+    # type=sub_skill + Bonus parent_type=sub_skill rows). Orphan sub-skills
+    # (8 test entries + arena legacy *_old) emit onto the catch-all
+    # Data:Skill/_orphan_sub_skills page. See D-037.
+    skill_result = extract_skills(paths)
+    n_skills = len(skill_result.skills)
+    n_skill_levels = sum(len(s.levels) for s in skill_result.skills)
+    n_skill_level_bonuses = sum(
+        len(lv.bonuses) for s in skill_result.skills for lv in s.levels
+    )
+    n_sub_skills = len(skill_result.sub_skills)
+    n_sub_skill_bonuses = sum(len(ss.bonuses) for ss in skill_result.sub_skills)
+    # Bucket sub-skills by parent_skill_id so we can inline them on the
+    # parent skill page; orphans collected separately for the catch-all.
+    sub_skills_by_parent: dict[str, list] = {}
+    orphan_sub_skills: list = []
+    for ss in skill_result.sub_skills:
+        if ss.parent_skill_id is None:
+            orphan_sub_skills.append(ss)
+        else:
+            sub_skills_by_parent.setdefault(ss.parent_skill_id, []).append(ss)
+    n_skill_pages = 0
+    for skill in skill_result.skills:
+        attached = sub_skills_by_parent.get(skill.id, ())
+        page = emit_skill_page(skill, attached, corpus, resolver=resolver)
+        (skill_dir / f"{skill.id}.wiki.txt").write_text(page, encoding="utf-8")
+        n_skill_pages += 1
+        total_chars += len(page)
+    n_orphan_sub_skills = len(orphan_sub_skills)
+    if orphan_sub_skills:
+        orphan_page = emit_orphan_sub_skills_page(
+            orphan_sub_skills, corpus, resolver=resolver,
+        )
+        (skill_dir / "_orphan_sub_skills.wiki.txt").write_text(
+            orphan_page, encoding="utf-8",
+        )
+        n_skill_pages += 1
+        total_chars += len(orphan_page)
+
+    # Astrologist weeks + months (Data:AstrologistEvent/<id>). 26 rows
+    # total (15 weeks + 11 months) — the periodically-rolled global
+    # modifiers ("Week of Sorcery", "Month of the Locust"). Identity
+    # pulled from DB/weeks/{weeks,months}.json; per-event roll_chance
+    # + global count_to_return from DB/weeks_info.json. See D-038.
+    astrologist_event_result = extract_astrologist_events(paths)
+    n_astrologist_events = 0
+    n_astro_by_category: dict[str, int] = {}
+    for ev in astrologist_event_result.events:
+        page = emit_astrologist_event_page(ev, corpus, resolver=resolver)
+        (astrologist_event_dir / f"{ev.id}.wiki.txt").write_text(page, encoding="utf-8")
+        n_astrologist_events += 1
+        n_astro_by_category[ev.category] = n_astro_by_category.get(ev.category, 0) + 1
+        total_chars += len(page)
+
+    # Game difficulties (Data:Difficulty/<id>). 5 rows from
+    # DB/difficulties.json (Easy/Normal/Hard/Expert/Impossible),
+    # each carrying per-side starting-resource buckets and the
+    # neutralPowerMultiplier scalar. The two sibling lobby files
+    # ship empty configs in 2026-05-05 — extracted but yield 0 rows.
+    # See D-039.
+    difficulty_result = extract_difficulties(paths)
+    n_difficulties = 0
+    for diff in difficulty_result.difficulties:
+        page = emit_difficulty_page(diff)
+        (difficulty_dir / f"{diff.id}.wiki.txt").write_text(page, encoding="utf-8")
+        n_difficulties += 1
+        total_chars += len(page)
+
     # Shared (hand-curated) Entry seed pages. Per-type top-level dirs
     # (data/<type>/); wiki pages land at Data:<PascalType>/<subtype>.
     # Cargo rows all write to the unified Entry table.
@@ -343,6 +477,28 @@ def cmd_extract(
         (type_dir / f"{subtype}.wiki.txt").write_text(seed_page, encoding="utf-8")
         n_entries_by_type[entry_type] = n_entries_by_type.get(entry_type, 0) + 1
         total_chars += len(seed_page)
+
+    # Per-patch resource catalog (Data:Resource/<id>) — extracted from
+    # DB/res/resources_info.json. Same Entry shape as the seeds, just
+    # with provenance pointing at the source JSON. See D-036.
+    resource_dir = data_dir / "resource"
+    resource_dir.mkdir(parents=True, exist_ok=True)
+    for r in extract_resources(paths):
+        page = emit_entry_page(
+            entry_type="resource",
+            subtype=r.id,
+            name_sid=r.name_sid,
+            desc_sid=r.desc_sid,
+            corpus=corpus,
+            resolver=resolver,
+            icon=r.icon,
+            narrative_desc_sid=r.narrative_desc_sid,
+            source_path=r.source_path,
+        )
+        (resource_dir / f"{r.id}.wiki.txt").write_text(page, encoding="utf-8")
+        n_entries_by_type["resource"] = n_entries_by_type.get("resource", 0) + 1
+        total_chars += len(page)
+
     n_entries = sum(n_entries_by_type.values())
 
     # Shared AttackPassive seed pages (Data:AttackPassive/<passive_id>).
@@ -372,12 +528,30 @@ def cmd_extract(
         f"{n} {t.replace('_', ' ')}"
         for t, n in sorted(n_entries_by_type.items())
     ) or "—"
+    # Building sub-readout: dwellings (the `hires` category) called out
+    # separately, everything else lumped into "other"; plus consolidated
+    # page count (rows live on fewer pages per (faction, sid) bucketing).
+    n_dwellings = n_building_by_cat.get("hires", 0)
+    n_other = sum(n for cat, n in n_building_by_cat.items() if cat != "hires")
+    bld_parts = f"{n_dwellings} dwellings, {n_other} other; {n_building_pages} pages"
+
+    # MapObject sub-readout: highlight the meatier categories, lump the rest.
+    _NOTABLE_MAP_CATS = ("hires", "portals", "res", "res_mines", "magic_mines", "chests", "event_banks")
+    _notable_counts = [(c, n_map_object_by_cat.get(c, 0)) for c in _NOTABLE_MAP_CATS if n_map_object_by_cat.get(c)]
+    _notable_total = sum(n for _, n in _notable_counts)
+    _other_total = sum(n for c, n in n_map_object_by_cat.items() if c not in _NOTABLE_MAP_CATS)
+    _parts = [f"{n} {c.replace('_', ' ')}" for c, n in _notable_counts]
+    if _other_total:
+        _parts.append(f"{_other_total} other")
+    map_obj_parts = ", ".join(_parts) or "—"
 
     console.print(
         f"[green]Wrote in {elapsed:.1f}s -> {target} ({total_chars:,} chars):[/green]\n"
         f"  {n_factions} factions ({n_city_names} city-name entries)\n"
         f"  {n_laws} laws ({n_law_levels} levels, {n_law_bonuses} bonus rows; "
         f"{n_law_positions} tree positions, {n_law_tiers} faction-tier rows)\n"
+        f"  {n_buildings} buildings ({bld_parts})\n"
+        f"  {n_map_objects} map objects ({map_obj_parts})\n"
         f"  {n_artifacts} artifacts ({n_artifact_bonuses} bonus rows)\n"
         f"  {n_item_sets} item sets ({n_item_set_tiers} tiers, {n_item_set_bonuses} bonus rows)\n"
         f"  {len(result.units)} units ({ab_parts})\n"
@@ -387,6 +561,12 @@ def cmd_extract(
         f"  {n_heroes} heroes\n"
         f"  {n_hero_specs} hero specializations ({n_spec_bonuses} bonus rows)\n"
         f"  {n_spells} spells ({n_spell_ranks} rank rows)\n"
+        f"  {n_skills} skills ({n_skill_levels} levels, {n_skill_level_bonuses} bonus rows; "
+        f"{n_sub_skills} sub-skills [{n_orphan_sub_skills} orphan], {n_sub_skill_bonuses} sub-skill bonus rows; "
+        f"{n_skill_pages} pages)\n"
+        f"  {n_astrologist_events} astrologist events "
+        f"({n_astro_by_category.get('week', 0)} weeks, {n_astro_by_category.get('month', 0)} months)\n"
+        f"  {n_difficulties} difficulties\n"
         f"  {n_entries} curated entry seeds ({seed_parts})"
     )
 
@@ -745,6 +925,7 @@ def cmd_inspect(
             console.print(f"[red]No unit with id={show_unit!r}[/red]")
             raise typer.Exit(1)
         console.print(f"\n[bold]{u.id}[/bold] ({u.faction.value} tier {u.tier})")
+
         console.print(u.model_dump_json(indent=2))
 
 

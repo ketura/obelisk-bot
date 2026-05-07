@@ -37,6 +37,11 @@ _FUNC_RE = re.compile(
 )
 _CALL_RE = re.compile(r"([A-Za-z_]\w*)\s*\((.*?)\)\s*", re.DOTALL)
 _COMMENT_RE = re.compile(r"//[^\n]*")
+# Multi-line C-style comments: /* ... */ — non-greedy, dot-matches-newline.
+# Strip these first so commented-out function bodies (e.g. the disabled
+# real implementation in current_skill_faction_humans, which leaves only
+# the literal `Text(return, "1")` active) don't pollute the parsed body.
+_BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
 
 
 def _split_args(inner: str) -> list[str]:
@@ -97,6 +102,7 @@ class ScriptRegistry:
             self.parse_text(text)
 
     def parse_text(self, text: str) -> None:
+        text = _BLOCK_COMMENT_RE.sub("", text)
         text = _COMMENT_RE.sub("", text)
         for fm in _FUNC_RE.finditer(text):
             decl, name, body = fm.group(1), fm.group(2), fm.group(3)

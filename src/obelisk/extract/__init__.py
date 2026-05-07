@@ -1,5 +1,6 @@
 """Extraction layer — read source JSON, produce canonical pydantic records."""
 
+from obelisk.extract.difficulty import extract_difficulties
 from obelisk.extract.faction import extract_factions
 from obelisk.extract.hero import (
     extract_hero_specializations,
@@ -7,8 +8,13 @@ from obelisk.extract.hero import (
     extract_heroes,
 )
 from obelisk.extract.artifact import extract_artifacts
+from obelisk.extract.astrologist_event import extract_astrologist_events
+from obelisk.extract.building import extract_buildings
 from obelisk.extract.item_set import extract_item_sets
 from obelisk.extract.law import extract_laws
+from obelisk.extract.map_object import extract_map_objects
+from obelisk.extract.resource import extract_resources
+from obelisk.extract.skill import extract_skills
 from obelisk.extract.spell import extract_spells
 from obelisk.extract.loader import (
     CorePaths,
@@ -29,13 +35,19 @@ __all__ = [
     "OwnershipClaims",
     "UnitExtractionResult",
     "assign_ownership",
+    "extract_artifacts",
+    "extract_astrologist_events",
+    "extract_buildings",
+    "extract_difficulties",
     "extract_factions",
     "extract_hero_specializations",
     "extract_hero_sub_classes",
-    "extract_artifacts",
     "extract_heroes",
     "extract_item_sets",
     "extract_laws",
+    "extract_map_objects",
+    "extract_resources",
+    "extract_skills",
     "extract_spells",
     "extract_units",
     "extract_units_enriched",

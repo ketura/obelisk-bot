@@ -322,12 +322,126 @@ ENTRY_SEEDS: dict[str, dict[str, dict[str, Any]]] = {
             "display_name_fallback": "Construct",
         },
     },
+
+    # ----------------------------------------------------------------
+    # Resources (D-036): NOT seeded here. Per-patch extracted from
+    # DB/res/resources_info.json by extract/resource.py — same pattern
+    # as FactionCityName. 16 entries: 9 economy resources (gold, wood,
+    # ore, gemstones, crystals, mercury, dust, graal, starDust) plus
+    # 7 progression counters (hero_mana, hero_move_points, hero_exp,
+    # side_exp, faction_laws_points, astrology_exp).
+    # ----------------------------------------------------------------
+
+    # ----------------------------------------------------------------
+    # Hero attributes (D-036). Six stats: the four primary (Attack /
+    # Defense / Spell Power / Knowledge) gained from leveling, plus
+    # Luck and Morale which the hero's value is added to all
+    # creatures in their army. SIDs in ui.json use the source
+    # camelCase forms (offence/spellPower/intelligence); subtype keys
+    # preserve those.
+    # ----------------------------------------------------------------
+    "hero_stat": {
+        "offence": {
+            "name_sid": "offence_name",
+            "desc_sid": "offence_description",
+            "display_name_fallback": "Attack",
+            "source_path": "Lang/english/texts/ui.json",
+        },
+        "defence": {
+            "name_sid": "defence_name",
+            "desc_sid": "defence_description",
+            "display_name_fallback": "Defense",
+            "source_path": "Lang/english/texts/ui.json",
+        },
+        "spellPower": {
+            "name_sid": "spellPower_name",
+            "desc_sid": "spellPower_description",
+            "display_name_fallback": "Spell Power",
+            "source_path": "Lang/english/texts/ui.json",
+        },
+        "intelligence": {
+            "name_sid": "intelligence_name",
+            "desc_sid": "intelligence_description",
+            "display_name_fallback": "Knowledge",
+            "source_path": "Lang/english/texts/ui.json",
+        },
+        "luck": {
+            "name_sid": "luck_name",
+            "desc_sid": "luck_description",
+            "display_name_fallback": "Luck",
+            "source_path": "Lang/english/texts/ui.json",
+        },
+        "morale": {
+            "name_sid": "morale_name",
+            "desc_sid": "morale_description",
+            "display_name_fallback": "Morale",
+            "source_path": "Lang/english/texts/ui.json",
+        },
+    },
+
+    # ----------------------------------------------------------------
+    # Unit combat stats (D-036). Pulled from ui.json's `unitStat_*`
+    # SID family. Subtypes use the source's underlying field names
+    # (offence/defence/damage/moral/luck/speed/initiative). Note the
+    # source spells "moral" without the trailing "e" — preserved on
+    # subtype to match the underlying enum.
+    # ----------------------------------------------------------------
+    "unit_stat": {
+        "offence": {
+            "name_sid": "unitStat_offence",
+            "desc_sid": "unitStat_offence_description",
+            "display_name_fallback": "Attack",
+            "source_path": "Lang/english/texts/ui.json",
+        },
+        "defence": {
+            "name_sid": "unitStat_defence",
+            "desc_sid": "unitStat_defence_description",
+            "display_name_fallback": "Defense",
+            "source_path": "Lang/english/texts/ui.json",
+        },
+        "damage": {
+            "name_sid": "unitStat_damage",
+            "desc_sid": "unitStat_damage_description_detailed",
+            "display_name_fallback": "Damage",
+            "source_path": "Lang/english/texts/ui.json",
+        },
+        "moral": {
+            "name_sid": "unitStat_moral",
+            "desc_sid": "unitStat_moral_description",
+            "display_name_fallback": "Morale",
+            "source_path": "Lang/english/texts/ui.json",
+        },
+        "luck": {
+            "name_sid": "unitStat_luck",
+            "desc_sid": "unitStat_luck_description",
+            "display_name_fallback": "Luck",
+            "source_path": "Lang/english/texts/ui.json",
+        },
+        "speed": {
+            "name_sid": "unitStat_speed",
+            "desc_sid": "unitStat_speed_description_detailed",
+            "display_name_fallback": "Speed",
+            "source_path": "Lang/english/texts/ui.json",
+        },
+        "initiative": {
+            "name_sid": "unitStat_initiative",
+            "desc_sid": "unitStat_initiative_description_detailed",
+            "display_name_fallback": "Initiative",
+            "source_path": "Lang/english/texts/ui.json",
+        },
+    },
 }
 
 
 def _entry_field_order() -> tuple[str, ...]:
-    base = ("type", "subtype", "display_name", "description", "icon",
-            "name_sid", "desc_sid")
+    base = (
+        "type", "subtype",
+        "display_name", "description",
+        "narrative_description",
+        "icon",
+        "name_sid", "desc_sid", "narrative_description_sid",
+        "source_path",
+    )
     lang_pairs: list[str] = []
     for lang_dir in _TRANSLATION_LANG_ORDER:
         code = LANG_CODE[lang_dir]
@@ -371,6 +485,9 @@ def render_translation_block(
     set_json: dict[str, Any] | None = None,
     artifact_json: dict[str, Any] | None = None,
     law_json: dict[str, Any] | None = None,
+    skill_json: dict[str, Any] | None = None,
+    sub_skill_json: dict[str, Any] | None = None,
+    skill_level: int | None = None,
 ) -> str:
     """Render a single ``{{Translation | …}}`` template invocation.
 
@@ -399,12 +516,16 @@ def render_translation_block(
                 name_sid, lang_dir, corpus, resolver, unit_json, ability_json,
                 spec_json=spec_json, magic_json=magic_json, set_json=set_json,
                 artifact_json=artifact_json, law_json=law_json,
+                skill_json=skill_json, sub_skill_json=sub_skill_json,
+                skill_level=skill_level,
             )
         if desc_sid:
             params[f"{code}_desc"] = _lookup_text(
                 desc_sid, lang_dir, corpus, resolver, unit_json, ability_json,
                 spec_json=spec_json, magic_json=magic_json, set_json=set_json,
                 artifact_json=artifact_json, law_json=law_json,
+                skill_json=skill_json, sub_skill_json=sub_skill_json,
+                skill_level=skill_level,
             )
 
     return render_call("Translation", params, key_order=_TRANSLATION_FIELD_ORDER)
@@ -426,6 +547,8 @@ def render_entry_block(
     *,
     display_name_fallback: str | None = None,
     icon: str | None = None,
+    narrative_desc_sid: str | None = None,
+    source_path: str | None = None,
     resolver: PlaceholderResolver | None = None,
 ) -> str:
     """Render a single ``{{Entry | …}}`` template invocation.
@@ -434,12 +557,17 @@ def render_entry_block(
     trailing newline). Use ``emit_entry_page`` when you want a complete
     standalone wiki page; use this when you're embedding the row in
     another emitter's output (e.g. faction pages embedding their city
-    rows). See D-024.
+    rows). See D-024 / D-036 (narrative_description + source_path
+    columns).
     """
     en_name = _lookup_text(name_sid, "english", corpus, resolver, None, None)
     en_desc = (
         _lookup_text(desc_sid, "english", corpus, resolver, None, None)
         if desc_sid else None
+    )
+    en_narr = (
+        _lookup_text(narrative_desc_sid, "english", corpus, resolver, None, None)
+        if narrative_desc_sid else None
     )
 
     params: dict[str, Any] = {
@@ -447,9 +575,12 @@ def render_entry_block(
         "subtype": subtype,
         "display_name": en_name or display_name_fallback,
         "description": en_desc,
+        "narrative_description": en_narr,
         "icon": icon,
         "name_sid": name_sid,
         "desc_sid": desc_sid,
+        "narrative_description_sid": narrative_desc_sid,
+        "source_path": source_path,
     }
     for lang_dir in _TRANSLATION_LANG_ORDER:
         code = LANG_CODE[lang_dir]
@@ -473,6 +604,8 @@ def emit_entry_page(
     *,
     display_name_fallback: str | None = None,
     icon: str | None = None,
+    narrative_desc_sid: str | None = None,
+    source_path: str | None = None,
     resolver: PlaceholderResolver | None = None,
 ) -> str:
     """Render a complete ``Data:<EntryType>/<subtype>`` page — the
@@ -491,6 +624,8 @@ def emit_entry_page(
         corpus=corpus,
         display_name_fallback=display_name_fallback,
         icon=icon,
+        narrative_desc_sid=narrative_desc_sid,
+        source_path=source_path,
         resolver=resolver,
     )
     return (
@@ -517,6 +652,8 @@ def emit_entry_page_from_seed(
         resolver=resolver,
         display_name_fallback=seed.get("display_name_fallback"),
         icon=seed.get("icon"),
+        narrative_desc_sid=seed.get("narrative_desc_sid"),
+        source_path=seed.get("source_path"),
     )
 
 
@@ -652,6 +789,9 @@ def _lookup_text(
     set_json: dict[str, Any] | None = None,
     artifact_json: dict[str, Any] | None = None,
     law_json: dict[str, Any] | None = None,
+    skill_json: dict[str, Any] | None = None,
+    sub_skill_json: dict[str, Any] | None = None,
+    skill_level: int | None = None,
 ) -> str | None:
     if not sid:
         return None
@@ -663,7 +803,8 @@ def _lookup_text(
             sid, raw, unit_json,
             lang=lang, ability_json=ability_json, spec_json=spec_json,
             magic_json=magic_json, set_json=set_json, artifact_json=artifact_json,
-            law_json=law_json,
+            law_json=law_json, skill_json=skill_json, sub_skill_json=sub_skill_json,
+            skill_level=skill_level,
         )
     return html_to_wiki(raw)
 

@@ -40,9 +40,17 @@ _DIR_TO_WIKI_TABLE: dict[str, str] = {
     "artifacts": "Artifact",
     "item_sets": "ItemSet",
     "laws": "Law",
+    "buildings": "Building",
+    "map_objects": "MapObject",
+    "skills": "Skill",
+    "astrologist_events": "AstrologistEvent",
+    "difficulties": "Difficulty",
     "attack_archetype": "AttackArchetype",
     "movement": "Movement",
     "creature_type": "CreatureType",
+    "resource": "Resource",
+    "hero_stat": "HeroStat",
+    "unit_stat": "UnitStat",
 }
 
 
