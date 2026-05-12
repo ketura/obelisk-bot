@@ -51,6 +51,6 @@ def emit_difficulty_page(diff: DifficultyRecord) -> str:
     }
     blocks: list[str] = [
         "<!-- Bot-managed page. Edit the source in obelisk-bot, not here. -->",
-        render_call("Difficulty", params, key_order=_DIFFICULTY_FIELD_ORDER),
+        render_call("DifficultyDef", params, key_order=_DIFFICULTY_FIELD_ORDER),
     ]
     return "\n\n".join(blocks) + "\n"

@@ -1,9 +1,41 @@
 # Copy to obelisk.ini and fill in. The real file is git-ignored.
 
 [wiki]
-host = oldenera.wiki.gg
-path = /
+# The HoMM:OE wiki lives under Hooded Horse's publisher domain.
+host = wiki.hoodedhorse.com
+# The path is the MediaWiki API base — adjust if your wiki lives at a
+# subpath. The default below is what the production wiki uses.
+path = /Heroes_of_Might_and_Magic_Olden_Era/
+scheme = https
+
+# Bot account (Special:BotPasswords on the wiki). NEVER use your real
+# password — bot passwords are scoped credentials that you revoke
+# without touching the master account.
 username = Yourname@obelisk-bot
 bot_password = xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
 user_agent = obelisk-bot/0.1 (+https://github.com/your-org/obelisk-bot)
 edit_summary = obelisk-bot: patch sync
+
+# Throttling. requests_per_second is enforced client-side (sleep
+# between API calls); maxlag is the server-side replication-lag hint
+# MediaWiki uses to back-pressure bots. Conservative defaults — for a
+# local test wiki you may want to crank requests_per_second up so
+# initial-population doesn't take forever.
+requests_per_second = 0.5
+maxlag = 5
+
+# --- Local test wiki example -----------------------------------------------
+# Swap the live values above for these to point at a local MediaWiki:
+#
+#   host = localhost:8080
+#   path = /
+#   scheme = http
+#   username = LocalAdmin@local-bot
+#   bot_password = local-bot-password
+#   requests_per_second = 5
+#   maxlag = 0
+#
+# You'll need MediaWiki + the Cargo extension + your data templates
+# (Template:Unit, Template:Faction, ...) provisioned on the local
+# side before any Data: page renders meaningfully.

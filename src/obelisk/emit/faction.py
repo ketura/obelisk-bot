@@ -82,7 +82,7 @@ def emit_faction_page(
     blocks: list[str] = [
         "<!-- Bot-managed page. Edit the source in obelisk-bot, not here. -->",
         render_call(
-            "Faction",
+            "FactionDef",
             faction_params,
             key_order=_FACTION_FIELD_ORDER,
         ),
@@ -117,7 +117,7 @@ def emit_faction_page(
         if tier_row.faction != faction.id:
             continue
         blocks.append(render_call(
-            "FactionLawTier",
+            "FactionLawTierDef",
             {
                 "faction": tier_row.faction,
                 "tier": tier_row.tier,
@@ -130,7 +130,7 @@ def emit_faction_page(
         if pos.faction != faction.id:
             continue
         blocks.append(render_call(
-            "LawTreePosition",
+            "LawTreePositionDef",
             {
                 "faction": pos.faction,
                 "tier": pos.tier,

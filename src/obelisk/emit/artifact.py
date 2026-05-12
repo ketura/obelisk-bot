@@ -99,7 +99,7 @@ def emit_artifact_page(
 
     blocks: list[str] = [
         "<!-- Bot-managed page. Edit the source in obelisk-bot, not here. -->",
-        render_call("Artifact", main_params, key_order=_ARTIFACT_FIELD_ORDER),
+        render_call("ArtifactDef", main_params, key_order=_ARTIFACT_FIELD_ORDER),
     ]
     xlat = render_translation_block(
         translation_type="artifact",

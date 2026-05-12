@@ -75,7 +75,7 @@ def emit_map_object_page(
 
     blocks: list[str] = [
         "<!-- Bot-managed page. Edit the source in obelisk-bot, not here. -->",
-        render_call("MapObject", main_params, key_order=_MAP_OBJECT_FIELD_ORDER),
+        render_call("MapObjectDef", main_params, key_order=_MAP_OBJECT_FIELD_ORDER),
     ]
 
     xlat = render_translation_block(

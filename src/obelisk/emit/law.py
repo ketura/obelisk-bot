@@ -1,15 +1,20 @@
 """Per-law wikitext page renderer.
 
-Per D-033: each ``Data:Law/<id>`` page carries a ``{{Law}}`` row,
-a ``{{Translation | type=law | …}}`` row for the shared name, then
-per-level: a ``{{LawLevel}}`` row, a ``{{LawLevelTranslation}}`` row,
-and 0+ ``{{Bonus | parent_type=law_level | parent_id=<id>_L<level> | …}}``
-rows.
+Per D-033: each ``Data:Law/<id>`` page carries a ``{{LawDef}}`` row,
+a ``{{TranslationDef | type=law | …}}`` row for the shared name, then
+per-level: a ``{{LawLevelDef}}`` row, a ``{{EntryDef | type=law_level
+| subtype=<id> | variant=<N> | …}}`` row carrying the level's non-
+English description translations, and 0+ ``{{BonusDef
+| parent_type=law_level | parent_id=<id>_L<level> | …}}`` rows.
 
 Description SIDs are shared across levels but resolve to different
 strings per level because each level's bonuses[].parameters values
 are different — the resolver's ``CurrentFractionLawConfig`` op reads
 from per-level law_json context.
+
+The per-level translation row used to be its own
+``LawLevelTranslationDef`` table; folded into the shared ``EntryDef``
+via ``(type='law_level', subtype=law_id, variant=level)``.
 """
 
 from __future__ import annotations
@@ -19,9 +24,8 @@ from typing import Any
 from obelisk.emit.cargo import render_call
 from obelisk.emit.hero import render_bonus
 from obelisk.emit.unit import (
-    LANG_CODE,
-    _TRANSLATION_LANG_ORDER,
     _lookup_text,
+    render_entry_block,
     render_translation_block,
 )
 from obelisk.models.law import LawLevelRecord, LawRecord
@@ -40,27 +44,13 @@ _LAW_LEVEL_FIELD_ORDER: tuple[str, ...] = (
 )
 
 
-def _law_level_translation_field_order() -> tuple[str, ...]:
-    """Field order for {{LawLevelTranslation | …}}: (law_id, level,
-    desc_sid) plus 15 non-English `<code>_desc` columns."""
-    base = ("law_id", "level", "desc_sid")
-    lang_cols = [
-        f"{LANG_CODE[lang_dir]}_desc"
-        for lang_dir in _TRANSLATION_LANG_ORDER
-    ]
-    return base + tuple(lang_cols)
-
-
-_LAW_LEVEL_TRANSLATION_FIELD_ORDER: tuple[str, ...] = _law_level_translation_field_order()
-
-
 def _render_level(
     law: LawRecord,
     level: LawLevelRecord,
     corpus: LocalizationCorpus,
     resolver: PlaceholderResolver | None,
 ) -> str:
-    """Render one {{LawLevel | …}} row. Builds a per-level law_json
+    """Render one {{LawLevelDef | …}} row. Builds a per-level law_json
     context (the parametersPerLevel[level-1] dict directly) so the
     interpreter's CurrentFractionLawConfig op resolves
     ``bonuses[N].parameters[M]`` reads against the right level."""
@@ -74,7 +64,7 @@ def _render_level(
         "cost": level.cost,
         "description": description,
     }
-    return render_call("LawLevel", params, key_order=_LAW_LEVEL_FIELD_ORDER)
+    return render_call("LawLevelDef", params, key_order=_LAW_LEVEL_FIELD_ORDER)
 
 
 def _render_level_translation(
@@ -84,24 +74,26 @@ def _render_level_translation(
     resolver: PlaceholderResolver | None,
 ) -> str:
     """Per-(law, level) translation row carrying the description in
-    the 15 non-English locales. English description sits on
-    LawLevel.description."""
-    params: dict[str, Any] = {
-        "law_id": law.id,
-        "level": level.level,
-        "desc_sid": law.desc_sid,
-    }
-    if law.desc_sid:
-        for lang_dir in _TRANSLATION_LANG_ORDER:
-            code = LANG_CODE[lang_dir]
-            params[f"{code}_desc"] = _lookup_text(
-                law.desc_sid, lang_dir, corpus, resolver, None, None,
-                law_json=level.raw_json,
-            )
-    return render_call(
-        "LawLevelTranslation",
-        params,
-        key_order=_LAW_LEVEL_TRANSLATION_FIELD_ORDER,
+    the 15 non-English locales. English description sits on the
+    parent ``LawLevelDef.description`` column.
+
+    Emits an ``EntryDef`` row with ``(type='law_level', subtype=law_id,
+    variant=level)``. Law levels have no name SID — only the
+    description varies per level — so name_sid stays unset.
+
+    Returns the empty string if the law has no desc_sid (no
+    translations to emit)."""
+    if not law.desc_sid:
+        return ""
+    return render_entry_block(
+        entry_type="law_level",
+        subtype=law.id,
+        name_sid=None,
+        desc_sid=law.desc_sid,
+        corpus=corpus,
+        variant=str(level.level),
+        resolver=resolver,
+        law_json=level.raw_json,
     )
 
 
@@ -136,7 +128,7 @@ def emit_law_page(
 
     blocks: list[str] = [
         "<!-- Bot-managed page. Edit the source in obelisk-bot, not here. -->",
-        render_call("Law", main_params, key_order=_LAW_FIELD_ORDER),
+        render_call("LawDef", main_params, key_order=_LAW_FIELD_ORDER),
     ]
 
     # One {{Translation | type=law}} row for the shared name. Build it
@@ -153,10 +145,15 @@ def emit_law_page(
     if xlat:
         blocks.append(xlat)
 
-    # Per-level rows: structural + translation + N bonuses
+    # Per-level rows: structural + translation + N bonuses. The
+    # translation row is skipped when the law has no desc_sid
+    # (nothing to localize), which lets emit treat the absence as
+    # sparse rather than emitting an empty stub.
     for level in law.levels:
         blocks.append(_render_level(law, level, corpus, resolver))
-        blocks.append(_render_level_translation(law, level, corpus, resolver))
+        xlat = _render_level_translation(law, level, corpus, resolver)
+        if xlat:
+            blocks.append(xlat)
         for bonus in level.bonuses:
             blocks.append(render_bonus(bonus))
 

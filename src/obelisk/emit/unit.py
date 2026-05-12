@@ -64,12 +64,16 @@ _UNIT_FIELD_ORDER: tuple[str, ...] = (
 
 
 _TEMPLATE_NAME_BY_TYPE: dict[str, str] = {
-    "active": "ActiveAbility",
-    "passive": "PassiveAbility",
-    "conditional_passive": "ConditionalPassiveAbility",
-    "global_passive": "GlobalPassiveAbility",
-    "aura": "AuraAbility",
-    "stat_passive": "StatPassiveAbility",
+    # Long-form names matching docs/cargo/UnitAbility*.md, with the
+    # standard ``Def`` suffix that distinguishes bot-emitted cargo
+    # definitions from the user-facing query templates of the same
+    # short name.
+    "active": "UnitAbilityActiveDef",
+    "passive": "UnitAbilityPassiveDef",
+    "conditional_passive": "UnitAbilityConditionalDef",
+    "global_passive": "UnitAbilityGlobalDef",
+    "aura": "UnitAbilityAuraDef",
+    "stat_passive": "UnitAbilityStatPassiveDef",
 }
 
 
@@ -435,7 +439,7 @@ ENTRY_SEEDS: dict[str, dict[str, dict[str, Any]]] = {
 
 def _entry_field_order() -> tuple[str, ...]:
     base = (
-        "type", "subtype",
+        "type", "subtype", "variant",
         "display_name", "description",
         "narrative_description",
         "icon",
@@ -528,7 +532,7 @@ def render_translation_block(
                 skill_level=skill_level,
             )
 
-    return render_call("Translation", params, key_order=_TRANSLATION_FIELD_ORDER)
+    return render_call("TranslationDef", params, key_order=_TRANSLATION_FIELD_ORDER)
 
 
 def iter_entry_seeds() -> Iterator[tuple[str, str]]:
@@ -541,28 +545,53 @@ def iter_entry_seeds() -> Iterator[tuple[str, str]]:
 def render_entry_block(
     entry_type: str,
     subtype: str,
-    name_sid: str,
+    name_sid: str | None,
     desc_sid: str | None,
     corpus: LocalizationCorpus,
     *,
+    variant: str | None = None,
     display_name_fallback: str | None = None,
     icon: str | None = None,
     narrative_desc_sid: str | None = None,
     source_path: str | None = None,
     resolver: PlaceholderResolver | None = None,
+    # Resolver context for placeholder substitution. Mirrors _lookup_text's
+    # kwargs; pass whichever the row's translated text needs.
+    law_json: dict[str, Any] | None = None,
+    skill_json: dict[str, Any] | None = None,
+    sub_skill_json: dict[str, Any] | None = None,
+    magic_json: dict[str, Any] | None = None,
+    skill_level: int | None = None,
 ) -> str:
-    """Render a single ``{{Entry | …}}`` template invocation.
+    """Render a single ``{{EntryDef | …}}`` template invocation.
 
     Returns just the bare template call (no surrounding comment, no
     trailing newline). Use ``emit_entry_page`` when you want a complete
     standalone wiki page; use this when you're embedding the row in
     another emitter's output (e.g. faction pages embedding their city
-    rows). See D-024 / D-036 (narrative_description + source_path
-    columns).
+    rows, or law/skill pages embedding per-level translations).
+
+    ``variant`` is an optional third key component (alongside ``type``
+    + ``subtype``) carrying sub-row indices — level for law/skill
+    levels, rank for spell ranks. Sparse-emitted when unset.
+
+    The ``*_json`` / ``skill_level`` kwargs thread resolver context for
+    rows whose translated text uses placeholders that need parent JSON
+    to substitute (e.g. ``law_json=level.raw_json`` resolves a law
+    level's description placeholders against the level's JSON).
+
+    See D-024 / D-036 (narrative_description + source_path columns).
     """
-    en_name = _lookup_text(name_sid, "english", corpus, resolver, None, None)
+    ctx = dict(
+        law_json=law_json, skill_json=skill_json, sub_skill_json=sub_skill_json,
+        magic_json=magic_json, skill_level=skill_level,
+    )
+    en_name = (
+        _lookup_text(name_sid, "english", corpus, resolver, None, None, **ctx)
+        if name_sid else None
+    )
     en_desc = (
-        _lookup_text(desc_sid, "english", corpus, resolver, None, None)
+        _lookup_text(desc_sid, "english", corpus, resolver, None, None, **ctx)
         if desc_sid else None
     )
     en_narr = (
@@ -573,6 +602,7 @@ def render_entry_block(
     params: dict[str, Any] = {
         "type": entry_type,
         "subtype": subtype,
+        "variant": variant,
         "display_name": en_name or display_name_fallback,
         "description": en_desc,
         "narrative_description": en_narr,
@@ -584,24 +614,26 @@ def render_entry_block(
     }
     for lang_dir in _TRANSLATION_LANG_ORDER:
         code = LANG_CODE[lang_dir]
-        params[f"{code}_name"] = _lookup_text(
-            name_sid, lang_dir, corpus, resolver, None, None
-        )
+        if name_sid:
+            params[f"{code}_name"] = _lookup_text(
+                name_sid, lang_dir, corpus, resolver, None, None, **ctx,
+            )
         if desc_sid:
             params[f"{code}_desc"] = _lookup_text(
-                desc_sid, lang_dir, corpus, resolver, None, None
+                desc_sid, lang_dir, corpus, resolver, None, None, **ctx,
             )
 
-    return render_call("Entry", params, key_order=_ENTRY_FIELD_ORDER)
+    return render_call("EntryDef", params, key_order=_ENTRY_FIELD_ORDER)
 
 
 def emit_entry_page(
     entry_type: str,
     subtype: str,
-    name_sid: str,
+    name_sid: str | None,
     desc_sid: str | None,
     corpus: LocalizationCorpus,
     *,
+    variant: str | None = None,
     display_name_fallback: str | None = None,
     icon: str | None = None,
     narrative_desc_sid: str | None = None,
@@ -609,12 +641,16 @@ def emit_entry_page(
     resolver: PlaceholderResolver | None = None,
 ) -> str:
     """Render a complete ``Data:<EntryType>/<subtype>`` page — the
-    bot-managed comment header plus one ``{{Entry | …}}`` call.
+    bot-managed comment header plus one ``{{EntryDef | …}}`` call.
 
     Callers pass the SIDs directly so this serves both hand-curated
     seeds (via ``emit_entry_page_from_seed``) and per-patch extracted
     Entry data. ``desc_sid`` may be ``None`` for entries that have
     only a name — description columns are then sparse-emitted.
+
+    ``variant`` is forwarded to ``render_entry_block`` for sub-row
+    keying (level/rank). Standalone Entry pages typically leave it
+    unset.
     """
     block = render_entry_block(
         entry_type=entry_type,
@@ -622,6 +658,7 @@ def emit_entry_page(
         name_sid=name_sid,
         desc_sid=desc_sid,
         corpus=corpus,
+        variant=variant,
         display_name_fallback=display_name_fallback,
         icon=icon,
         narrative_desc_sid=narrative_desc_sid,
@@ -701,7 +738,7 @@ def emit_attack_passive_page(
     blocks = [
         "<!-- Bot-managed page. Edit the source in obelisk-bot, not here. -->",
         render_call(
-            "AttackPassive",
+            "AttackPassiveDef",
             parent_params,
             key_order=_ATTACK_PASSIVE_FIELD_ORDER,
         ),
@@ -743,11 +780,11 @@ def emit_unit_page(
     """Render the full wikitext for ``Data:Unit/<unit.id>``."""
     blocks: list[str] = [
         "<!-- Bot-managed page. Edit the source in obelisk-bot, not here. -->",
-        render_call("Unit", _unit_params(unit, corpus, resolver, unit_json), key_order=_UNIT_FIELD_ORDER),
+        render_call("UnitDef", _unit_params(unit, corpus, resolver, unit_json), key_order=_UNIT_FIELD_ORDER),
     ]
 
     for ability in unit.unit_abilities:
-        template = _TEMPLATE_NAME_BY_TYPE.get(ability.ability_type, "UnitAbility")
+        template = _TEMPLATE_NAME_BY_TYPE.get(ability.ability_type, "UnitAbilityDef")
         order = _ORDER_BY_TYPE.get(ability.ability_type, _FALLBACK_ORDER)
         blocks.append(
             render_call(
@@ -763,7 +800,7 @@ def emit_unit_page(
     if unit.unit_attack is not None:
         blocks.append(
             render_call(
-                "UnitAttack",
+                "UnitAttackDef",
                 _unit_attack_params(unit.unit_attack),
                 key_order=_UNIT_ATTACK_FIELD_ORDER,
             )

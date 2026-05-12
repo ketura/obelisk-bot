@@ -60,7 +60,7 @@ def _render_tier(
         "description": en_desc,
     }
     out: list[str] = [
-        render_call("ItemSetTier", tier_params, key_order=_ITEM_SET_TIER_FIELD_ORDER),
+        render_call("ItemSetTierDef", tier_params, key_order=_ITEM_SET_TIER_FIELD_ORDER),
     ]
     xlat = render_translation_block(
         translation_type="item_set_tier",
@@ -104,7 +104,7 @@ def emit_item_set_page(
 
     blocks: list[str] = [
         "<!-- Bot-managed page. Edit the source in obelisk-bot, not here. -->",
-        render_call("ItemSet", main_params, key_order=_ITEM_SET_FIELD_ORDER),
+        render_call("ItemSetDef", main_params, key_order=_ITEM_SET_FIELD_ORDER),
     ]
     name_xlat = render_translation_block(
         translation_type="item_set",

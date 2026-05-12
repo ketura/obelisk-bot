@@ -105,7 +105,7 @@ def _render_one_building(
         "source_path": building.source_path,
     }
     building_block = render_call(
-        "Building", main_params, key_order=_BUILDING_FIELD_ORDER,
+        "BuildingDef", main_params, key_order=_BUILDING_FIELD_ORDER,
     )
     xlat = render_translation_block(
         translation_type="building",

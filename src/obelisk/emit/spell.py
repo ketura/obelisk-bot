@@ -1,10 +1,18 @@
 """Per-spell wikitext page renderer.
 
-Per D-030: each ``Data:Spell/<id>`` page carries a ``{{Spell}}`` row,
-a ``{{Translation | type=spell | …}}`` row, and 4 inline
-``{{SpellRank | spell_id=<id> | level=N | …}}`` rows. Hero-dependent
-placeholders (Spellpower / hero stat refs) intentionally remain as
-``{N}`` markers since the actual values vary by caster.
+Per D-030 (revised): each ``Data:Spell/<id>`` page carries a
+``{{SpellDef}}`` row and 4 inline ``{{SpellRankDef | spell_id=<id>
+| level=N | …}}`` rows. Hero-dependent placeholders (Spellpower /
+hero stat refs) intentionally remain as ``{N}`` markers since the
+actual values vary by caster.
+
+Each ``SpellRankDef`` row is self-contained: it carries the English
+description + bonus_description (the level-unlock blurb) inline, plus
+15 × (name, desc, bonus_description) language columns. This is the
+"expanded EntryDef" shape — the old ``SpellRankTranslationDef``
+sibling table was folded back into ``SpellRankDef`` because the
+three-translatable-field shape didn't fit the generic ``EntryDef``
+name+desc-only schema.
 """
 
 from __future__ import annotations
@@ -35,25 +43,20 @@ _SPELL_FIELD_ORDER: tuple[str, ...] = (
     "source_path",
 )
 
-_SPELL_RANK_FIELD_ORDER: tuple[str, ...] = (
-    "spell_id", "level",
-    "description_sid", "description",
-    "mana_cost",
-    "bonus_description_sid", "bonus_description",
-    "upgrade_cost",
-)
 
+def _spell_rank_field_order() -> tuple[str, ...]:
+    """Field order for the merged ``{{SpellRankDef | …}}``.
 
-def _spell_rank_translation_field_order() -> tuple[str, ...]:
-    """Field order for {{SpellRankTranslation | …}}. Carries 3 SID
-    columns (name + desc + bonus_description) and 15 × 3 lang
-    columns (per-language name/desc/bonus_desc triples). English
-    defaults sit on Spell.name and SpellRank.description /
-    SpellRank.bonus_description.
+    Identity (spell_id, level) → SIDs (name + desc + bonus) →
+    English defaults → numeric costs → 15 × (lang_name, lang_desc,
+    lang_bonus_description) triples.
     """
     base = (
         "spell_id", "level",
-        "name_sid", "desc_sid", "bonus_description_sid",
+        "name_sid",
+        "description_sid", "description",
+        "bonus_description_sid", "bonus_description",
+        "mana_cost", "upgrade_cost",
     )
     lang_cols: list[str] = []
     for lang_dir in _TRANSLATION_LANG_ORDER:
@@ -64,7 +67,7 @@ def _spell_rank_translation_field_order() -> tuple[str, ...]:
     return base + tuple(lang_cols)
 
 
-_SPELL_RANK_TRANSLATION_FIELD_ORDER: tuple[str, ...] = _spell_rank_translation_field_order()
+_SPELL_RANK_FIELD_ORDER: tuple[str, ...] = _spell_rank_field_order()
 
 
 def _render_rank(
@@ -73,80 +76,49 @@ def _render_rank(
     corpus: LocalizationCorpus,
     resolver: PlaceholderResolver | None,
 ) -> str:
-    """Render one {{SpellRank | …}} row. Builds a per-rank magic_json
-    context ({"raw": spell.raw_json, "level": rank.level}) so the
-    interpreter's CurrentMagicBattle / CurrentMagicWorld ops index
-    the correct mastery-level sub-block. SP-dependent {N} still
-    stays unsubstituted."""
-    magic_json = (
-        {"raw": spell.raw_json, "level": rank.level}
-        if spell.raw_json else None
-    )
-    description = _lookup_text(
-        rank.description_sid, "english", corpus, resolver, None, None,
-        magic_json=magic_json,
-    )
-    bonus_description = _lookup_text(
-        rank.bonus_description_sid, "english", corpus, resolver, None, None,
-        magic_json=magic_json,
-    )
-    params: dict[str, Any] = {
-        "spell_id": rank.spell_id,
-        "level": rank.level,
-        "description_sid": rank.description_sid,
-        "description": description,
-        "mana_cost": rank.mana_cost,
-        "bonus_description_sid": rank.bonus_description_sid,
-        "bonus_description": bonus_description,
-        "upgrade_cost": rank.upgrade_cost,
-    }
-    return render_call("SpellRank", params, key_order=_SPELL_RANK_FIELD_ORDER)
+    """Render one merged ``{{SpellRankDef | …}}`` row.
 
-
-def _render_rank_translation(
-    spell: SpellRecord,
-    rank: SpellRankRecord,
-    corpus: LocalizationCorpus,
-    resolver: PlaceholderResolver | None,
-) -> str:
-    """Render a {{SpellRankTranslation | …}} row carrying the 15
-    non-English locales of the spell name + this rank's description +
-    this rank's bonus description. Builds the per-rank magic_json
-    context so localized placeholders also substitute correctly.
+    Combines what used to be two rows (``SpellRankDef`` for English +
+    mechanical data; ``SpellRankTranslationDef`` for 15 non-English
+    locales). Per-rank ``magic_json`` context ({"raw": spell.raw_json,
+    "level": rank.level}) drives the resolver so per-mastery-level
+    magicDealer values substitute in all 16 languages identically.
+    SP-dependent placeholders (``{N}`` referencing hero stats) still
+    stay unsubstituted — those resolve at display time.
     """
     magic_json = (
         {"raw": spell.raw_json, "level": rank.level}
         if spell.raw_json else None
     )
+
+    def text(sid: str | None, lang: str) -> str | None:
+        return _lookup_text(
+            sid, lang, corpus, resolver, None, None,
+            magic_json=magic_json,
+        )
+
     params: dict[str, Any] = {
-        "spell_id": spell.id,
+        "spell_id": rank.spell_id,
         "level": rank.level,
         "name_sid": spell.name_sid,
-        "desc_sid": rank.description_sid,
+        "description_sid": rank.description_sid,
+        "description": text(rank.description_sid, "english"),
         "bonus_description_sid": rank.bonus_description_sid,
+        "bonus_description": text(rank.bonus_description_sid, "english"),
+        "mana_cost": rank.mana_cost,
+        "upgrade_cost": rank.upgrade_cost,
     }
     for lang_dir in _TRANSLATION_LANG_ORDER:
         code = LANG_CODE[lang_dir]
         if spell.name_sid:
-            params[f"{code}_name"] = _lookup_text(
-                spell.name_sid, lang_dir, corpus, resolver, None, None,
-                magic_json=magic_json,
-            )
+            params[f"{code}_name"] = text(spell.name_sid, lang_dir)
         if rank.description_sid:
-            params[f"{code}_desc"] = _lookup_text(
-                rank.description_sid, lang_dir, corpus, resolver, None, None,
-                magic_json=magic_json,
-            )
+            params[f"{code}_desc"] = text(rank.description_sid, lang_dir)
         if rank.bonus_description_sid:
-            params[f"{code}_bonus_description"] = _lookup_text(
-                rank.bonus_description_sid, lang_dir, corpus, resolver, None, None,
-                magic_json=magic_json,
+            params[f"{code}_bonus_description"] = text(
+                rank.bonus_description_sid, lang_dir,
             )
-    return render_call(
-        "SpellRankTranslation",
-        params,
-        key_order=_SPELL_RANK_TRANSLATION_FIELD_ORDER,
-    )
+    return render_call("SpellRankDef", params, key_order=_SPELL_RANK_FIELD_ORDER)
 
 
 def emit_spell_page(
@@ -191,14 +163,12 @@ def emit_spell_page(
 
     blocks: list[str] = [
         "<!-- Bot-managed page. Edit the source in obelisk-bot, not here. -->",
-        render_call("Spell", main_params, key_order=_SPELL_FIELD_ORDER),
+        render_call("SpellDef", main_params, key_order=_SPELL_FIELD_ORDER),
     ]
-    # Per D-030 (revised): no per-spell {{Translation}} row.
-    # Per-rank SpellRankTranslation rows below cover name + desc +
-    # bonus_description in one place per (spell, level). Each rank
-    # gets its own {raw, level} magic_json context so descriptions
-    # substitute the per-mastery-level magicDealer values.
+    # Per D-030 (revised): no per-spell {{TranslationDef}} row, and no
+    # separate per-rank translation row either — the merged
+    # SpellRankDef carries name + desc + bonus_description in all 16
+    # languages on a single row per (spell, level).
     for rank in spell.ranks:
         blocks.append(_render_rank(rank, spell, corpus, resolver))
-        blocks.append(_render_rank_translation(spell, rank, corpus, resolver))
     return "\n\n".join(blocks) + "\n"

@@ -105,7 +105,7 @@ def emit_hero_class_page(
 
     blocks: list[str] = [
         "<!-- Bot-managed page. Edit the source in obelisk-bot, not here. -->",
-        render_call("HeroClass", params, key_order=_HERO_CLASS_FIELD_ORDER),
+        render_call("HeroClassDef", params, key_order=_HERO_CLASS_FIELD_ORDER),
     ]
     xlat = render_translation_block(
         translation_type="hero_class",
@@ -152,7 +152,7 @@ _HERO_START_SQUAD_FIELD_ORDER: tuple[str, ...] = (
 
 def _render_squad_slot(hero_id: str, slot: HeroStartSquadSlot) -> str:
     return render_call(
-        "HeroStartSquad",
+        "HeroStartSquadDef",
         {
             "hero_id": hero_id,
             "variant": slot.variant,
@@ -255,7 +255,7 @@ def emit_hero_page(
 
     blocks: list[str] = [
         "<!-- Bot-managed page. Edit the source in obelisk-bot, not here. -->",
-        render_call("Hero", params, key_order=_HERO_FIELD_ORDER),
+        render_call("HeroDef", params, key_order=_HERO_FIELD_ORDER),
     ]
 
     name_xlat = render_translation_block(
@@ -335,7 +335,7 @@ def render_bonus(b: Bonus) -> str:
         params["action_area"] = b.action_area
     if b.fraction is not None:
         params["fraction"] = b.fraction
-    return render_call("Bonus", params, key_order=_BONUS_FIELD_ORDER)
+    return render_call("BonusDef", params, key_order=_BONUS_FIELD_ORDER)
 
 
 def emit_hero_specialization_page(
@@ -366,7 +366,7 @@ def emit_hero_specialization_page(
 
     blocks: list[str] = [
         "<!-- Bot-managed page. Edit the source in obelisk-bot, not here. -->",
-        render_call("HeroSpecialization", main_params,
+        render_call("HeroSpecializationDef", main_params,
                     key_order=_HERO_SPECIALIZATION_FIELD_ORDER),
     ]
     xlat = render_translation_block(
@@ -441,7 +441,7 @@ def emit_hero_sub_class_page(
 
     blocks: list[str] = [
         "<!-- Bot-managed page. Edit the source in obelisk-bot, not here. -->",
-        render_call("HeroSubClass", main_params,
+        render_call("HeroSubClassDef", main_params,
                     key_order=_HERO_SUB_CLASS_FIELD_ORDER),
     ]
     xlat = render_translation_block(

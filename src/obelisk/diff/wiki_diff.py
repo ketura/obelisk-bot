@@ -28,7 +28,7 @@ from pathlib import Path
 # (Data:Movement/<subtype>, Data:CreatureType/<subtype>, ...) — this map
 # governs the page-name namespace, not the underlying Cargo table.
 # Update when a new top-level data category comes online.
-_DIR_TO_WIKI_TABLE: dict[str, str] = {
+DIR_TO_WIKI_TABLE: dict[str, str] = {
     "units": "Unit",
     "attack_passives": "AttackPassive",
     "factions": "Faction",
@@ -51,6 +51,49 @@ _DIR_TO_WIKI_TABLE: dict[str, str] = {
     "resource": "Resource",
     "hero_stat": "HeroStat",
     "unit_stat": "UnitStat",
+}
+
+# Back-compat alias for code that still uses the private name.
+_DIR_TO_WIKI_TABLE = DIR_TO_WIKI_TABLE
+
+
+def wiki_title_for_relpath(relpath: str) -> str:
+    """Given a path relative to an extract dir (e.g.
+    ``data/units/angel.wiki.txt``), return the on-wiki page title
+    (``Data:Unit/angel``). Empty string if the path doesn't map.
+
+    Special cases:
+
+    * Top-level extract files (no ``data/`` prefix) are looked up
+      against ``_ROOT_FILES_TO_TITLE`` — currently only
+      ``coverage.wiki.txt`` -> ``Data:Coverage``.
+    * ``data/<type>/_index.wiki.txt`` -> ``Data:<Table>`` (bare, no
+      subpage). The index page is the namespace landing page.
+    """
+    p = Path(relpath)
+    parts = p.parts
+    # Top-level (extract-root) artifact pages.
+    if len(parts) == 1:
+        return _ROOT_FILES_TO_TITLE.get(parts[0], "")
+    if parts[0] not in ("data", "Data"):
+        return ""
+    if len(parts) < 2:
+        return ""
+    table = DIR_TO_WIKI_TABLE.get(parts[1], parts[1])
+    page_id = p.stem.replace(".wiki", "")
+    # The per-namespace index page lands at the bare Data:<Table>
+    # title, not Data:<Table>/_index.
+    if page_id == "_index":
+        return f"Data:{table}"
+    return f"Data:{table}/{page_id}"
+
+
+# Top-level extract files (not under data/) that we want to upload.
+# Coverage is bot-managed and useful as a wiki diagnostic. Goose lives
+# at the repo root (not in extract output) and is intentionally not
+# pushed. Extend as we add new top-level artifacts.
+_ROOT_FILES_TO_TITLE: dict[str, str] = {
+    "coverage.wiki.txt": "Data:Coverage",
 }
 
 
@@ -129,17 +172,13 @@ class WikiPageDiff:
     @property
     def wiki_title(self) -> str:
         """The full on-wiki page title, e.g. ``Data:Unit/crossbowman`` or
-        ``Data:Entry/movement/fly``.
+        ``Data:Movement/fly``.
 
         Joins the wiki-side table name (looked up from the on-disk
-        directory) with the page id. The directory→table mapping lives
-        in ``_DIR_TO_WIKI_TABLE`` at module top.
+        directory) with the page id. The mapping lives in
+        ``DIR_TO_WIKI_TABLE`` at module top.
         """
-        parts = Path(self.relpath).parts
-        if len(parts) < 2 or parts[0] not in ("data", "Data"):
-            return ""
-        table = _DIR_TO_WIKI_TABLE.get(parts[1], parts[1])
-        return f"Data:{table}/{self.page_id}"
+        return wiki_title_for_relpath(self.relpath)
 
 
 @dataclass

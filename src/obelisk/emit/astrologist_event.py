@@ -64,7 +64,7 @@ def emit_astrologist_event_page(
     blocks: list[str] = [
         "<!-- Bot-managed page. Edit the source in obelisk-bot, not here. -->",
         render_call(
-            "AstrologistEvent", main_params,
+            "AstrologistEventDef", main_params,
             key_order=_ASTROLOGIST_EVENT_FIELD_ORDER,
         ),
     ]

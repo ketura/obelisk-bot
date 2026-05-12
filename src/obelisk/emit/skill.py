@@ -1,11 +1,16 @@
 """Per-skill wikitext page renderer.
 
 Per D-037: each ``Data:Skill/<skill_id>`` page is self-contained —
-it carries the top-level ``{{Skill}}`` row, all per-level
-``{{SkillLevel}}`` + ``{{SkillLevelTranslation}}`` + ``{{Bonus}}``
-rows, and inlines every sub-skill referenced by any of this
-skill's levels (``{{SubSkill}}`` + ``{{Translation type=sub_skill}}``
-+ ``{{Bonus parent_type=sub_skill}}``).
+it carries the top-level ``{{SkillDef}}`` row, all per-level
+``{{SkillLevelDef}}`` + ``{{EntryDef | type=skill_level | …}}`` +
+``{{BonusDef}}`` rows, and inlines every sub-skill referenced by any
+of this skill's levels (``{{SubSkillDef}}`` + ``{{TranslationDef
+type=sub_skill}}`` + ``{{BonusDef parent_type=sub_skill}}``).
+
+The per-(skill, level) translation row used to be its own
+``SkillLevelTranslationDef`` table; it now folds into the shared
+``EntryDef`` via ``(type='skill_level', subtype=skill_id,
+variant=level)``.
 
 Orphan sub-skills (not referenced by any skill — the 8 test
 sub-skills like ``sub_skill_marchOfWar`` plus a handful of arena
@@ -20,9 +25,8 @@ from typing import Any, Iterable
 from obelisk.emit.cargo import render_call
 from obelisk.emit.hero import render_bonus
 from obelisk.emit.unit import (
-    LANG_CODE,
-    _TRANSLATION_LANG_ORDER,
     _lookup_text,
+    render_entry_block,
     render_translation_block,
 )
 from obelisk.models.localization import LocalizationCorpus
@@ -53,18 +57,6 @@ _SUB_SKILL_FIELD_ORDER: tuple[str, ...] = (
     "icon",
     "source_path",
 )
-
-
-def _skill_level_translation_field_order() -> tuple[str, ...]:
-    base = ("skill_id", "level", "name_sid", "desc_sid")
-    lang_cols: list[str] = []
-    for lang_dir in _TRANSLATION_LANG_ORDER:
-        code = LANG_CODE[lang_dir]
-        lang_cols.extend([f"{code}_name", f"{code}_desc"])
-    return base + tuple(lang_cols)
-
-
-_SKILL_LEVEL_TRANSLATION_FIELD_ORDER: tuple[str, ...] = _skill_level_translation_field_order()
 
 
 def _render_skill_main(
@@ -106,7 +98,7 @@ def _render_skill_main(
         "max_level": len(skill.levels),
         "source_path": skill.source_path,
     }
-    return render_call("Skill", params, key_order=_SKILL_FIELD_ORDER)
+    return render_call("SkillDef", params, key_order=_SKILL_FIELD_ORDER)
 
 
 def _render_skill_level(
@@ -140,7 +132,7 @@ def _render_skill_level(
             ",".join(level.offered_sub_skills) if level.offered_sub_skills else None
         ),
     }
-    return render_call("SkillLevel", params, key_order=_SKILL_LEVEL_FIELD_ORDER)
+    return render_call("SkillLevelDef", params, key_order=_SKILL_LEVEL_FIELD_ORDER)
 
 
 def _render_skill_level_translation(
@@ -148,29 +140,26 @@ def _render_skill_level_translation(
     corpus: LocalizationCorpus,
     resolver: PlaceholderResolver | None,
 ) -> str:
+    """Per-(skill, level) translation row carrying non-English
+    name + desc when the level has its own override. English defaults
+    sit on ``SkillLevelDef.name`` / ``.desc``.
+
+    Emits an ``EntryDef`` row with ``(type='skill_level',
+    subtype=skill_id, variant=level)``. Sparse — returns the empty
+    string when the level has neither a name nor a desc SID (the
+    common case: most levels inherit from the parent skill)."""
     if not level.name_sid and not level.desc_sid:
         return ""
-    params: dict[str, Any] = {
-        "skill_id": level.skill_id,
-        "level": level.level,
-        "name_sid": level.name_sid,
-        "desc_sid": level.desc_sid,
-    }
-    for lang_dir in _TRANSLATION_LANG_ORDER:
-        code = LANG_CODE[lang_dir]
-        if level.name_sid:
-            params[f"{code}_name"] = _lookup_text(
-                level.name_sid, lang_dir, corpus, resolver, None, None,
-                skill_json=level.raw_json, skill_level=level.level,
-            )
-        if level.desc_sid:
-            params[f"{code}_desc"] = _lookup_text(
-                level.desc_sid, lang_dir, corpus, resolver, None, None,
-                skill_json=level.raw_json, skill_level=level.level,
-            )
-    return render_call(
-        "SkillLevelTranslation", params,
-        key_order=_SKILL_LEVEL_TRANSLATION_FIELD_ORDER,
+    return render_entry_block(
+        entry_type="skill_level",
+        subtype=level.skill_id,
+        name_sid=level.name_sid,
+        desc_sid=level.desc_sid,
+        corpus=corpus,
+        variant=str(level.level),
+        resolver=resolver,
+        skill_json=level.raw_json,
+        skill_level=level.level,
     )
 
 
@@ -206,7 +195,7 @@ def _render_sub_skill(
         "icon": sub.icon,
         "source_path": sub.source_path,
     }
-    sub_block = render_call("SubSkill", params, key_order=_SUB_SKILL_FIELD_ORDER)
+    sub_block = render_call("SubSkillDef", params, key_order=_SUB_SKILL_FIELD_ORDER)
     xlat = render_translation_block(
         translation_type="sub_skill",
         target_id=sub.id,
