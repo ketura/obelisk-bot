@@ -14,6 +14,8 @@ import json
 from collections.abc import Iterable, Mapping
 from typing import Any
 
+from obelisk.resolve.wikitext import normalize_name
+
 
 # Wikitext characters that break template syntax inside parameter values.
 # We replace with HTML entities so the value renders literally on the page
@@ -24,6 +26,13 @@ _WIKITEXT_ESCAPES = {
     "{{": "&#123;&#123;",
     "}}": "&#125;&#125;",
 }
+
+# Field keys whose value is the canonical English name and gets reused as
+# a filename for icons/images on the wiki side. Smart apostrophes get
+# flattened to ASCII for those keys only — per-language siblings
+# (pt_br_name, cs_name, ...) keep their typography because they're pure
+# display, never filename-fodder.
+_NAME_FIELDS: frozenset[str] = frozenset({"name", "display_name"})
 
 
 def render_value(value: Any) -> str:
@@ -105,7 +114,10 @@ def render_call(
 
     lines: list[str] = [f"{{{{{template}"]
     for k in ordered_keys:
-        rendered = render_value(params[k])
+        value = params[k]
+        if k in _NAME_FIELDS and isinstance(value, str):
+            value = normalize_name(value)
+        rendered = render_value(value)
         if sparse and rendered == "":
             continue
         lines.append(f"| {k} = {rendered}")
