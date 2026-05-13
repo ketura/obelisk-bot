@@ -51,6 +51,8 @@ from obelisk.emit import (
 )
 from obelisk.extract import (
     CorePaths,
+    apply_skill_granted_magics,
+    apply_specialization_magic_replacements,
     extract_artifacts,
     extract_astrologist_events,
     extract_buildings,
@@ -253,7 +255,23 @@ def cmd_extract(
     # records. Hero rows sparse-emit fields that match the class
     # default (faction heroes uniformly inherit; campaign/tutorial
     # routinely override stats/start_level/atb). See D-027.
+    #
+    # Skills + specs both extracted upfront so we can compose two
+    # passes on start_magics before the hero pages render:
+    #   1. ``apply_skill_granted_magics`` — prepend spells granted by
+    #      ``heroMagicAddition`` bonuses on starting skills (Summon
+    #      Avatar family).
+    #   2. ``apply_specialization_magic_replacements`` — apply spec
+    #      ``heroMagicReplace`` swaps, which now also catch the spells
+    #      injected by step 1.
+    # The skill-emit pass below reuses ``skill_result``; spec emit
+    # reuses ``spec_result``.
+    skill_result = extract_skills(paths)
+    spec_result = extract_hero_specializations(paths)
     hero_result = extract_heroes(paths)
+    hero_result = apply_skill_granted_magics(hero_result, skill_result)
+    hero_result = apply_specialization_magic_replacements(hero_result, spec_result)
+
     n_hero_classes = 0
     for hc in hero_result.hero_classes:
         page = emit_hero_class_page(hc, corpus, resolver=resolver)
@@ -269,7 +287,6 @@ def cmd_extract(
 
     # Hero specializations (Data:HeroSpecialization/<id>). 126 records,
     # each with N inline {{HeroSpecializationBonus}} rows. See D-028.
-    spec_result = extract_hero_specializations(paths)
     n_hero_specs = 0
     n_spec_bonuses = 0
     for spec in spec_result.specializations:
@@ -402,7 +419,8 @@ def cmd_extract(
     # parent_type=sub_skill rows). Orphan sub-skills (8 test entries +
     # arena legacy *_old) emit onto the catch-all
     # Data:Skill/_orphan_sub_skills page. See D-037.
-    skill_result = extract_skills(paths)
+    # (``skill_result`` was extracted earlier so the hero pass could see
+    # heroMagicAddition bonuses; reused here without re-extracting.)
     n_skills = len(skill_result.skills)
     n_skill_levels = sum(len(s.levels) for s in skill_result.skills)
     n_skill_level_bonuses = sum(
@@ -985,6 +1003,7 @@ def _run_upload(
     config_path: Path,
     *,
     dry_run: bool,
+    summary: str,
 ) -> None:
     """Shared upload loop. Reads the manifest, drives the client, logs.
 
@@ -1020,6 +1039,7 @@ def _run_upload(
 
     if dry_run:
         console.print("[yellow]DRY RUN[/yellow] - showing what would be pushed:")
+        console.print(f"[bold]Edit summary:[/bold] {summary}")
         # Persist the same info to a parallel log file so operators have a
         # grep-able record without having to actually push. Status values
         # mirror the manifest verbatim (added/changed/removed/success/
@@ -1059,6 +1079,7 @@ def _run_upload(
         f"[bold]Wiki:[/bold] {cfg.scheme}://{cfg.host}{cfg.path}  "
         f"(throttle: {cfg.requests_per_second} req/s, maxlag: {cfg.maxlag}s)"
     )
+    console.print(f"[bold]Edit summary:[/bold] {summary}")
 
     # Resume reporting: how many pages already-succeeded from a prior run.
     n_resumed = sum(1 for e in pages if e.get("status") == "success")
@@ -1116,7 +1137,7 @@ def _run_upload(
                 continue
 
             body = body_path.read_text(encoding="utf-8")
-            result_up = client.put_page(title, body)
+            result_up = client.put_page(title, body, summary=summary)
             _log_result(log_fp, title, result_up.status, result_up.detail)
             if result_up.status == "written":
                 pushed += 1
@@ -1153,7 +1174,7 @@ def _run_upload(
                     patch_article["status"] = "failure"
                 else:
                     art_body = art_path.read_text(encoding="utf-8")
-                    art_result = client.put_page(art_title, art_body)
+                    art_result = client.put_page(art_title, art_body, summary=summary)
                     _log_result(log_fp, art_title, art_result.status, art_result.detail)
                     if art_result.status == "written":
                         console.print(f"[green]pushed[/green] {art_title}")
@@ -1209,6 +1230,14 @@ def cmd_upload(
     label_b: str | None = typer.Argument(
         None, help="If provided, upload the diff from label_a (old) -> label_b (new)."
     ),
+    message: str = typer.Option(
+        ..., "--message", "-m",
+        help=(
+            "Edit summary for this run. Required — there is no fallback to "
+            "obelisk.ini's edit_summary. The literal prefix 'obelisk-bot: ' "
+            "is prepended automatically; don't include it yourself."
+        ),
+    ),
     out_root: Path = typer.Option(
         Path("out"), "--out", help="Output root. Default: out/"
     ),
@@ -1223,15 +1252,20 @@ def cmd_upload(
 
     Two modes:
 
-    * **Full push** (one arg): ``obelisk upload <label>`` reads
+    * **Full push** (one arg): ``obelisk upload <label> -m "..."`` reads
       ``out/<label>/manifest.json`` (produced by ``obelisk generate``)
       and pushes every listed page. Used for initial wiki population
       or any full re-sync.
 
-    * **Diff push** (two args): ``obelisk upload <old> <new>`` reads
-      ``out/<new>/diff_vs_<old>/manifest.json`` (produced by
+    * **Diff push** (two args): ``obelisk upload <old> <new> -m "..."``
+      reads ``out/<new>/diff_vs_<old>/manifest.json`` (produced by
       ``obelisk diff``) and pushes the changed pages plus the patch
       article. Used in the routine patch cycle.
+
+    The ``-m`` / ``--message`` flag is required on every invocation —
+    deliberately so, to force a fresh edit summary per run instead of
+    silently reusing a stale default from ``obelisk.ini``. The literal
+    prefix ``obelisk-bot: `` is prepended automatically.
 
     Both modes are idempotent — pages whose on-wiki text already
     matches are skipped. Throttling honors the
@@ -1240,6 +1274,18 @@ def cmd_upload(
     Per-run logs (``upload_log.jsonl`` + ``upload_errors.txt`` on
     failure) are written next to the manifest.
     """
+    # Reject empty / whitespace-only messages. typer's ``...`` default
+    # rejects a *missing* flag but happily accepts ``-m ""``; we want
+    # the prompt-me-each-time behavior, so reject that explicitly.
+    stripped = message.strip()
+    if not stripped:
+        console.print(
+            "[red]--message / -m must be a non-empty edit summary[/red] "
+            "(use e.g. -m \"fix Zoran apostrophe\")"
+        )
+        raise typer.Exit(1)
+    summary = f"obelisk-bot: {stripped}"
+
     if label_b is None:
         # Full-push mode.
         extract_dir = out_root / label_a
@@ -1265,7 +1311,7 @@ def cmd_upload(
             raise typer.Exit(1)
         body_root = new_dir
 
-    _run_upload(manifest_path, body_root, config_path, dry_run=dry_run)
+    _run_upload(manifest_path, body_root, config_path, dry_run=dry_run, summary=summary)
 
 
 # ----------------------------------------------------------------------------

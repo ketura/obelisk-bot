@@ -3,6 +3,8 @@
 from obelisk.extract.difficulty import extract_difficulties
 from obelisk.extract.faction import extract_factions
 from obelisk.extract.hero import (
+    apply_skill_granted_magics,
+    apply_specialization_magic_replacements,
     extract_hero_specializations,
     extract_hero_sub_classes,
     extract_heroes,
@@ -34,6 +36,8 @@ __all__ = [
     "CorePaths",
     "OwnershipClaims",
     "UnitExtractionResult",
+    "apply_skill_granted_magics",
+    "apply_specialization_magic_replacements",
     "assign_ownership",
     "extract_artifacts",
     "extract_astrologist_events",

@@ -4,6 +4,13 @@ Walks ``DB/heroes/<faction-folder>/*.json`` plus ``campaign/`` and
 ``campaign_tutorial/`` subdirs, derives the 12 ``HeroClass`` records
 from the faction-hero corpus, then emits ``HeroRecord`` entries with
 class-default fields encoded as sparse overrides. See D-027.
+
+Also exposes two post-processing passes on hero ``start_magics``:
+:func:`apply_skill_granted_magics` (heroMagicAddition on starting
+skills) and :func:`apply_specialization_magic_replacements`
+(heroMagicReplace on the hero's specialization). The two compose;
+skill-grant pass runs first so the replacement pass can act on the
+injected spells.
 """
 
 from __future__ import annotations
@@ -26,6 +33,7 @@ from obelisk.models.hero import (
     HeroSubClassExtractionResult,
     HeroSubClassRecord,
 )
+from obelisk.models.skill import SkillExtractionResult
 
 
 # Folder name on disk → faction id (for the necros / demons drift).
@@ -418,6 +426,152 @@ def extract_hero_specializations(paths: CorePaths) -> HeroSpecializationExtracti
                 out.append(spec)
     out.sort(key=lambda s: s.id)
     return HeroSpecializationExtractionResult(specializations=tuple(out))
+
+
+def apply_skill_granted_magics(
+    hero_result: HeroExtractionResult,
+    skill_result: SkillExtractionResult,
+) -> HeroExtractionResult:
+    """Inject spells granted by starting skills into ``start_magics``.
+
+    Some starting spells aren't on ``startMagics`` in the source JSON —
+    they're granted by skills the hero ships with at game-start. The
+    Summon Avatar family is the canonical example: ``skill_summoner``
+    rank N carries a ``heroMagicAddition`` bonus that grants
+    ``bonus_magic_astral_summon_N``; the faction hero starts with rank 1
+    of Summoner but no astral_summon entry on startMagics, so without
+    this pass the spell is invisible to the wiki and any downstream
+    ``heroMagicReplace`` substitution can't fire on it.
+
+    Cumulative-rank semantics: a hero starting with ``(skill_X, R)``
+    receives the union of ``heroMagicAddition`` grants on ``skill_X``'s
+    ranks 1..R. The granting source on ``SkillRecord`` lives at
+    ``levels[i].bonuses`` (i.e. ``parametersPerLevel[i].bonuses`` in
+    the source JSON), so we walk that directly.
+
+    Position: skill-granted spells are *prepended* to ``start_magics``
+    so the subsequent ``apply_specialization_magic_replacements``
+    pass picks them up and any spec-replace pair fires correctly.
+    Spells already present in ``start_magics`` are not duplicated.
+
+    The dedicated ``parametersPerLevel`` bonuses are the only path we
+    handle today — sub_skills (the rank 4/5 specialization entries)
+    don't grant ``astral_summon`` family spells in 2026-05-13, and the
+    parent-skill grants are the only path the corpus uses for the
+    spec-replace interaction. Empirically catches 3 specs in the
+    current patch (the Summon Avatar family on
+    ``nature_hero_17`` / ``unfrozen_hero_8`` / ``campaign_hero_5``);
+    the remaining heroMagicReplace specs that don't fire on starting
+    state are explicitly out of scope per the level-1-only design call.
+    """
+    # Build {skill_id: {rank: tuple[spell_id, ...]}}
+    grants: dict[str, dict[int, tuple[Sid, ...]]] = {}
+    for skill in skill_result.skills:
+        per_rank: dict[int, list[Sid]] = {}
+        for level in skill.levels:
+            spells: list[Sid] = []
+            for b in level.bonuses:
+                if b.type == "heroMagicAddition" and b.parameters:
+                    spell = b.parameters[0]
+                    if spell:
+                        spells.append(spell)
+            if spells:
+                per_rank[level.level] = spells
+        if per_rank:
+            grants[skill.id] = {r: tuple(v) for r, v in per_rank.items()}
+
+    if not grants:
+        return hero_result
+
+    new_heroes: list[HeroRecord] = []
+    for h in hero_result.heroes:
+        granted: list[Sid] = []
+        seen_in_grant: set[Sid] = set()
+        seen_existing: set[Sid] = set(h.start_magics)
+        for skill_id, rank in h.start_skills:
+            per_rank = grants.get(skill_id)
+            if not per_rank:
+                continue
+            for r in range(1, rank + 1):
+                for spell in per_rank.get(r, ()):
+                    # Skip duplicates: already in start_magics, or already
+                    # collected from an earlier skill.
+                    if spell in seen_existing or spell in seen_in_grant:
+                        continue
+                    granted.append(spell)
+                    seen_in_grant.add(spell)
+        if not granted:
+            new_heroes.append(h)
+            continue
+        new_start_magics = tuple(granted) + h.start_magics
+        new_heroes.append(h.model_copy(update={"start_magics": new_start_magics}))
+
+    return hero_result.model_copy(update={"heroes": tuple(new_heroes)})
+
+
+def apply_specialization_magic_replacements(
+    hero_result: HeroExtractionResult,
+    spec_result: HeroSpecializationExtractionResult,
+) -> HeroExtractionResult:
+    """Resolve ``heroMagicReplace`` specialization bonuses into the
+    hero's ``start_magics``.
+
+    Spell-specialty heroes (e.g. Haste -> Masterful Haste) carry the
+    *base* spell on ``startMagics`` in the source JSON; the swap to
+    the masterful variant lives on the specialization as a bonus of
+    type ``heroMagicReplace`` with ``parameters=[old_sid, new_sid]``.
+    Without this pass the wiki shows the base spell on the hero
+    infobox and the masterful variant only as inline spec text — the
+    two views disagree.
+
+    Substitution rules:
+
+    * Each ``heroMagicReplace`` bonus is applied as a literal old->new
+      substitution against the hero's ``start_magics`` tuple.
+    * Pairs are applied in source order — preserves chain semantics
+      (``X->Y`` then ``Y->Z`` collapses to ``X->Z``) if it ever shows
+      up. Empirically not present in 2026-05-13.
+    * If the hero's spec carries ``heroMagicReplace`` bonuses whose
+      ``old_sid`` isn't in ``start_magics``, that's a silent no-op:
+      the spec still affects spell-learning behavior in-game, but
+      the start loadout is unchanged. ~11/36 affected specs in
+      2026-05-13 fall into this bucket — they're not bugs.
+
+    Heroes outside the spell-specialty path pass through unchanged.
+    Returns a new :class:`HeroExtractionResult`; the input is not
+    mutated (records are frozen anyway).
+    """
+    replacements: dict[str, list[tuple[Sid, Sid]]] = {}
+    for spec in spec_result.specializations:
+        pairs: list[tuple[Sid, Sid]] = []
+        for b in spec.bonuses:
+            if b.type == "heroMagicReplace" and len(b.parameters) >= 2:
+                pairs.append((b.parameters[0], b.parameters[1]))
+        if pairs:
+            replacements[spec.id] = pairs
+
+    if not replacements:
+        return hero_result
+
+    def _substitute(spell: Sid, pairs: list[tuple[Sid, Sid]]) -> Sid:
+        for old, new in pairs:
+            if spell == old:
+                spell = new
+        return spell
+
+    new_heroes: list[HeroRecord] = []
+    for h in hero_result.heroes:
+        pairs = replacements.get(h.specialization_id)
+        if not pairs or not h.start_magics:
+            new_heroes.append(h)
+            continue
+        substituted = tuple(_substitute(s, pairs) for s in h.start_magics)
+        if substituted == h.start_magics:
+            new_heroes.append(h)
+            continue
+        new_heroes.append(h.model_copy(update={"start_magics": substituted}))
+
+    return hero_result.model_copy(update={"heroes": tuple(new_heroes)})
 
 
 # -----------------------------------------------------------------------------
