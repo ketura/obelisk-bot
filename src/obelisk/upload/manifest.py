@@ -77,12 +77,18 @@ def build_full_manifest(
     *,
     label: str | None = None,
     include_coverage: bool = True,
+    include_cargo_templates: bool = True,
 ) -> Manifest:
     """Walk ``extract_dir`` and return a Manifest covering every wiki page.
 
     Includes every ``*.wiki.txt`` under ``data/`` (or ``Data/`` for
     legacy emit dirs). Optionally includes ``coverage.wiki.txt`` at the
-    extract root (default on — its wiki home is ``Data:Coverage``).
+    extract root (default on — its wiki home is ``Data:Coverage``) and
+    every ``*.wiki.txt`` under ``cargo_templates/`` (default on — each
+    wiki home is ``Template:<basename>``). The cargo templates are
+    copied into the extract dir by ``obelisk generate`` from the
+    project's ``docs/cargo/`` tree; this function only walks whatever
+    happens to be there.
 
     Pages whose relpath can't be mapped to a wiki title are skipped with
     no warning; the upload layer can't push them anyway. (Currently
@@ -124,6 +130,20 @@ def build_full_manifest(
                 seen["coverage.wiki.txt"] = ManifestEntry(
                     title=title, relpath="coverage.wiki.txt", status="added",
                 )
+
+    # Cargo template docs -> Template namespace.
+    if include_cargo_templates:
+        ct_dir = extract_dir / "cargo_templates"
+        if ct_dir.is_dir():
+            for fp in sorted(ct_dir.glob("*.wiki.txt")):
+                rel = fp.relative_to(extract_dir).as_posix()
+                key = rel.lower()
+                if key in seen:
+                    continue
+                title = wiki_title_for_relpath(rel)
+                if not title:
+                    continue
+                seen[key] = ManifestEntry(title=title, relpath=rel, status="added")
 
     entries = sorted(seen.values(), key=lambda e: e.title)
     return Manifest(kind="full", label=final_label, pages=entries)

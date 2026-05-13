@@ -1,0 +1,34 @@
+<noinclude>
+Splinter for <code>ability_type = passive</code>. Most passives are pure-data (immunities, disablers, stat overrides), already rolled up to the <code>UnitDef</code> row. This table only holds scalars unique to the passive itself — which in practice is just the rare <code>sequence_effect</code> flag.
+
+Join to <code>UnitAbilityDef</code> on <code>ability_id</code>.
+
+== Schema ==
+{{#cargo_declare:_table=UnitAbilityPassive
+| ability_id = String
+| sequence_effect = String (allowed values=add_attack_after_counter_melee,add_attack_after_counter_shoot,assist_ability,counter_before_attack)
+}}
+
+<pre><nowiki>
+{{UnitAbilityPassiveDef
+| ability_id = String                         <!-- FK -> UnitAbility.ability_id -->
+| sequence_effect = String (allowed values=add_attack_after_counter_melee,add_attack_after_counter_shoot,assist_ability,counter_before_attack)
+}}
+</nowiki></pre>
+
+== Field notes ==
+* '''<code>sequence_effect</code>''' marks passives that interact with the combat-action sequence. Only 14 / 327 passives in the 2026-05-03 corpus have this set, so the table is mostly empty rows of just <code>ability_id</code>. That's intentional — the parent <code>UnitAbilityDef</code> row carries everything else (name, desc, sids).
+* '''Passives' classification data''' (immunities, disablers, creature type) lives on the <code>UnitDef</code> row, not here. Those are properties of the unit, not a passive instance.
+* '''Action-triggered passives''' (e.g. Hydra's regen-on-take-damage) have complex <code>actions[]</code> JSON the bot doesn't surface as columns. The wiki layer should treat <code>desc</code> as the source of truth for what they do.
+
+== Related tables ==
+* [[Template:UnitAbilityDef|UnitAbility]] — parent (1:1 on <code>ability_id</code>).
+
+== Notes ==
+
+[[Category:Cargo Definitions]]
+</noinclude><includeonly>{{#cargo_store:_table=UnitAbilityPassive
+| ability_id = {{{ability_id|}}}
+| sequence_effect = {{{sequence_effect|}}}
+}}
+Created <code>UnitAbilityPassive</code> entry: <code>{{{ability_id|}}}</code></includeonly>

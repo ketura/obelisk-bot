@@ -809,6 +809,62 @@ def cmd_diff_patch(
 # ----------------------------------------------------------------------------
 
 
+# Files in docs/cargo/ that aren't real cargo definitions and should not
+# be copied into the extract's cargo_templates/ snapshot. README is
+# reference prose for human readers; the three *TranslationDef stubs are
+# forwarding notices for tables that were removed during the EntryDef
+# consolidation (D-026/D-030 follow-on).
+_CARGO_TEMPLATES_SKIP: set[str] = {
+    "README.wiki.txt",
+    "LawLevelTranslationDef.wiki.txt",
+    "SkillLevelTranslationDef.wiki.txt",
+    "SpellRankTranslationDef.wiki.txt",
+}
+
+
+def _copy_cargo_templates(extract_dir: Path) -> int:
+    """Copy the cargo template docs into ``<extract_dir>/cargo_templates/``.
+
+    Source: ``docs/cargo/*.wiki.txt`` and ``docs/cargo/shared/*.wiki.txt``
+    relative to the project root (resolved from this module's location).
+    The ``shared/`` subdir gets flattened — every template lands at the
+    same level so the wiki title rule ``cargo_templates/X.wiki.txt ->
+    Template:X`` works uniformly.
+
+    Returns the number of files copied. Skips files listed in
+    ``_CARGO_TEMPLATES_SKIP``. The destination directory is wiped of
+    existing ``.wiki.txt`` files before the copy so renamed-or-removed
+    cargo defs don't leave stale entries behind.
+    """
+    import shutil
+
+    src_root = Path(__file__).resolve().parents[2] / "docs" / "cargo"
+    if not src_root.is_dir():
+        console.print(
+            f"[yellow]Skipping cargo templates: {src_root} not found[/yellow]"
+        )
+        return 0
+
+    dest = extract_dir / "cargo_templates"
+    dest.mkdir(exist_ok=True)
+    # Wipe stale entries so a rename/removal in docs/cargo/ doesn't leak
+    # an orphan into the snapshot.
+    for stale in dest.glob("*.wiki.txt"):
+        stale.unlink()
+
+    n = 0
+    # Walk both the top-level cargo/ and cargo/shared/ — flatten on copy.
+    for src_dir in (src_root, src_root / "shared"):
+        if not src_dir.is_dir():
+            continue
+        for fp in sorted(src_dir.glob("*.wiki.txt")):
+            if fp.name in _CARGO_TEMPLATES_SKIP:
+                continue
+            shutil.copyfile(fp, dest / fp.name)
+            n += 1
+    return n
+
+
 @app.command("generate")
 def cmd_generate(
     label: str = typer.Argument(..., help="Label of the extracted patch to manifest."),
@@ -819,12 +875,25 @@ def cmd_generate(
         True, "--coverage/--no-coverage",
         help="Include coverage.wiki.txt as Data:Coverage (default on).",
     ),
+    include_cargo_templates: bool = typer.Option(
+        True, "--cargo-templates/--no-cargo-templates",
+        help=(
+            "Copy docs/cargo/*.wiki.txt into out/<label>/cargo_templates/ "
+            "and include them in the manifest as Template:X pages (default on)."
+        ),
+    ),
 ) -> None:
     """Generate a full-push manifest for an extracted patch.
 
-    Walks ``out/<label>/data/`` (and optionally the top-level
-    ``coverage.wiki.txt``) and writes ``out/<label>/manifest.json``
-    listing every page as status='added'. No patch article.
+    Walks ``out/<label>/data/`` plus (optionally) the top-level
+    ``coverage.wiki.txt`` and the ``cargo_templates/`` snapshot, then
+    writes ``out/<label>/manifest.json`` listing every page as
+    status='added'. No patch article.
+
+    The cargo templates snapshot is freshly copied from the project's
+    ``docs/cargo/`` tree on every run, so the manifest always
+    references the current cargo def docs. Skipped files (README,
+    forwarding stubs) never make it into the snapshot.
 
     Use this for initial wiki population or any "push everything"
     scenario. ``obelisk upload <label>`` (single arg) consumes it.
@@ -841,8 +910,15 @@ def cmd_generate(
         )
         raise typer.Exit(1)
 
+    n_cargo = 0
+    if include_cargo_templates:
+        n_cargo = _copy_cargo_templates(extract_dir)
+
     manifest = build_full_manifest(
-        extract_dir, label=label, include_coverage=include_coverage,
+        extract_dir,
+        label=label,
+        include_coverage=include_coverage,
+        include_cargo_templates=include_cargo_templates,
     )
     manifest_path = extract_dir / "manifest.json"
     manifest.write(manifest_path)
@@ -860,6 +936,14 @@ def cmd_generate(
             console.print(
                 "  [yellow]Data:Coverage requested but coverage.wiki.txt not found[/yellow]"
             )
+    if include_cargo_templates:
+        n_tpl_in_manifest = sum(
+            1 for e in manifest.pages if e.title.startswith("Template:")
+        )
+        console.print(
+            f"  {n_tpl_in_manifest} cargo templates included "
+            f"(copied {n_cargo} from docs/cargo/)"
+        )
     console.print(
         f"[bold]Next:[/bold] [cyan]obelisk upload {label}[/cyan] "
         f"(use --dry-run first for a preview)"
@@ -884,6 +968,17 @@ def _log_result(log_fp, title: str, status: str, detail: str) -> None:
     log_fp.flush()
 
 
+def _save_manifest(manifest_path: Path, manifest: dict) -> None:
+    """Persist the manifest dict back to disk in canonical JSON form.
+
+    Called after every page result during upload so a crash mid-run
+    still leaves a usable resume cursor: every entry whose status
+    reached ``success`` is already on disk, and the next ``obelisk
+    upload`` invocation picks up where this one left off.
+    """
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+
 def _run_upload(
     manifest_path: Path,
     body_root: Path,
@@ -897,6 +992,15 @@ def _run_upload(
     ``pages`` are resolved against it. The patch article's path (if
     present) is resolved against the manifest's *containing* dir, which
     is where ``obelisk diff`` writes ``patch_article.wiki.txt``.
+
+    Resume-on-rerun: each page's ``status`` field in the manifest is
+    updated after the upload attempt — ``success`` for written or
+    already-correct (``unchanged``) pages, ``failure`` for anything
+    that errored. On a subsequent run, ``success`` entries are skipped
+    without contacting the wiki; every other status (including
+    ``failure``, ``added``, ``changed``, ``removed``) gets re-attempted.
+    To force a full re-push, regenerate the manifest with
+    ``obelisk generate <label>`` first.
 
     Per-run logs land next to the manifest:
 
@@ -918,10 +1022,12 @@ def _run_upload(
         console.print("[yellow]DRY RUN[/yellow] - showing what would be pushed:")
         # Persist the same info to a parallel log file so operators have a
         # grep-able record without having to actually push. Status values
-        # mirror the manifest verbatim (added/changed/removed) — we can't
-        # predict written vs unchanged without contacting the wiki, so
-        # don't pretend to. Filename is .dryrun. to keep it side-by-side
-        # with real-run logs without ever clobbering them.
+        # mirror the manifest verbatim (added/changed/removed/success/
+        # failure) — we can't predict written vs unchanged without
+        # contacting the wiki, so don't pretend to. Filename is .dryrun.
+        # to keep it side-by-side with real-run logs without ever
+        # clobbering them. Dry-run does NOT touch the manifest itself —
+        # resume state on disk is preserved.
         dryrun_log = manifest_dir / "upload_log.dryrun.jsonl"
         with dryrun_log.open("w", encoding="utf-8") as log_fp:
             for entry in pages:
@@ -954,6 +1060,19 @@ def _run_upload(
         f"(throttle: {cfg.requests_per_second} req/s, maxlag: {cfg.maxlag}s)"
     )
 
+    # Resume reporting: how many pages already-succeeded from a prior run.
+    n_resumed = sum(1 for e in pages if e.get("status") == "success")
+    pa_resumed = bool(patch_article and patch_article.get("status") == "success")
+    if n_resumed or pa_resumed:
+        total_resumed = n_resumed + (1 if pa_resumed else 0)
+        console.print(
+            f"[bold]Resume:[/bold] {total_resumed} entr"
+            f"{'y' if total_resumed == 1 else 'ies'} already marked 'success' "
+            f"in the manifest — skipping without contacting the wiki. "
+            f"Run [cyan]obelisk generate {manifest.get('label', '<label>')}[/cyan] "
+            f"to reset the manifest if you want a full re-push."
+        )
+
     pushed = unchanged = failed = skipped = 0
     failure_lines: list[str] = []
 
@@ -966,14 +1085,25 @@ def _run_upload(
             title = entry["title"]
             relpath = entry["relpath"]
             status = entry.get("status", "added")
+
+            # Resume: skip pages already marked successful in a prior run.
+            # No wiki round-trip needed — manifest is our cursor.
+            if status == "success":
+                continue
+
             if status == "removed":
                 # We never auto-delete on the wiki side — log+skip.
+                # Leave the manifest entry as 'removed' (not 'success')
+                # so re-running still treats it as a no-op, and so the
+                # operator can see at a glance which entries are
+                # intentionally not pushed.
                 _log_result(log_fp, title, "skipped_removed", "manifest status=removed")
                 console.print(
                     f"[yellow]skip removed:[/yellow] {title} (not auto-deleting on wiki)"
                 )
                 skipped += 1
                 continue
+
             body_path = body_root / relpath
             if not body_path.is_file():
                 detail = f"missing body file: {body_path}"
@@ -981,45 +1111,64 @@ def _run_upload(
                 failure_lines.append(f"{title}\t{detail}")
                 console.print(f"  [red]MISSING[/red] {title}: {body_path}")
                 failed += 1
+                entry["status"] = "failure"
+                _save_manifest(manifest_path, manifest)
                 continue
+
             body = body_path.read_text(encoding="utf-8")
             result_up = client.put_page(title, body)
             _log_result(log_fp, title, result_up.status, result_up.detail)
             if result_up.status == "written":
                 pushed += 1
                 console.print(f"  [green]pushed[/green] {title}")
+                entry["status"] = "success"
             elif result_up.status == "unchanged":
                 unchanged += 1
                 # Don't spam — unchanged is the common case on reruns.
+                entry["status"] = "success"
             else:
                 failed += 1
                 failure_lines.append(f"{title}\t{result_up.detail}")
                 console.print(f"  [red]FAILED[/red] {title}: {result_up.detail}")
+                entry["status"] = "failure"
+            # Persist after every result so a mid-run crash resumes
+            # from the last completed page on the next invocation.
+            _save_manifest(manifest_path, manifest)
 
         # Patch article (diff manifests only).
         if patch_article:
-            art_title = patch_article["title"]
-            art_path = manifest_dir / patch_article["path"]
-            if not art_path.is_file():
-                detail = f"missing patch article: {art_path}"
-                _log_result(log_fp, art_title, "failed", detail)
-                failure_lines.append(f"{art_title}\t{detail}")
-                console.print(f"[red]MISSING patch article: {art_path}[/red]")
-                failed += 1
+            pa_status = patch_article.get("status", "")
+            if pa_status == "success":
+                # Already pushed in a prior run; no-op.
+                pass
             else:
-                art_body = art_path.read_text(encoding="utf-8")
-                art_result = client.put_page(art_title, art_body)
-                _log_result(log_fp, art_title, art_result.status, art_result.detail)
-                if art_result.status == "written":
-                    console.print(f"[green]pushed[/green] {art_title}")
-                    pushed += 1
-                elif art_result.status == "unchanged":
-                    console.print(f"[grey]unchanged[/grey] {art_title}")
-                    unchanged += 1
-                else:
-                    console.print(f"[red]FAILED[/red] {art_title}: {art_result.detail}")
-                    failure_lines.append(f"{art_title}\t{art_result.detail}")
+                art_title = patch_article["title"]
+                art_path = manifest_dir / patch_article["path"]
+                if not art_path.is_file():
+                    detail = f"missing patch article: {art_path}"
+                    _log_result(log_fp, art_title, "failed", detail)
+                    failure_lines.append(f"{art_title}\t{detail}")
+                    console.print(f"[red]MISSING patch article: {art_path}[/red]")
                     failed += 1
+                    patch_article["status"] = "failure"
+                else:
+                    art_body = art_path.read_text(encoding="utf-8")
+                    art_result = client.put_page(art_title, art_body)
+                    _log_result(log_fp, art_title, art_result.status, art_result.detail)
+                    if art_result.status == "written":
+                        console.print(f"[green]pushed[/green] {art_title}")
+                        pushed += 1
+                        patch_article["status"] = "success"
+                    elif art_result.status == "unchanged":
+                        console.print(f"[grey]unchanged[/grey] {art_title}")
+                        unchanged += 1
+                        patch_article["status"] = "success"
+                    else:
+                        console.print(f"[red]FAILED[/red] {art_title}: {art_result.detail}")
+                        failure_lines.append(f"{art_title}\t{art_result.detail}")
+                        failed += 1
+                        patch_article["status"] = "failure"
+                _save_manifest(manifest_path, manifest)
 
     err_path = manifest_dir / "upload_errors.txt"
     if failure_lines:
@@ -1035,10 +1184,17 @@ def _run_upload(
         # No failures this run — remove a stale error file from a prior run.
         err_path.unlink()
 
-    console.print(
-        f"[bold]Upload:[/bold] {pushed} written, {unchanged} unchanged, "
-        f"{skipped} skipped, {failed} failed"
-    )
+    summary_parts = [
+        f"{pushed} written",
+        f"{unchanged} unchanged",
+    ]
+    total_resumed = n_resumed + (1 if pa_resumed else 0)
+    if total_resumed:
+        summary_parts.append(f"{total_resumed} resumed (already success)")
+    if skipped:
+        summary_parts.append(f"{skipped} skipped (removed)")
+    summary_parts.append(f"{failed} failed")
+    console.print(f"[bold]Upload:[/bold] {', '.join(summary_parts)}")
     console.print(f"  log: {log_path}")
     if failure_lines:
         console.print(f"  [red]errors:[/red] {err_path}")

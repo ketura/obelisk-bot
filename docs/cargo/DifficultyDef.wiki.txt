@@ -1,0 +1,92 @@
+<noinclude>
+One row per game difficulty setting. 5 entries in 2026-05-05: Easy / Normal / Hard / Expert / Impossible. Each carries the balance inputs the engine actually uses: per-side starting-resource buckets and the global <code>neutral_power_multiplier</code> (the scalar applied to adventure-map encounter strength).
+
+Two source-data quirks worth flagging up front:
+
+* The source <code>nameSid</code> values (<code>EasyDifficultySid</code>, <code>NormalDifficultySid</code>, …) are ''not'' L10n entries — they don't resolve in any <code>Lang/<locale>/</code> file. We store them on the row for fidelity, but the canonical display name is the <code>id</code> itself.
+* The source <code>descriptionSid</code> field carries literal English text ("This is an Easy difficulty setting."), not an L10n key. We store it as a plain <code>description</code> string column.
+
+Because of those, this table doesn't carry a companion <code><nowiki>{{TranslationDef}}</nowiki></code> row — the source data ships in English only.
+
+== Page layout ==
+<code>Data:Difficulty/<id></code> carries a single <code><nowiki>{{DifficultyDef}}</nowiki></code> row.
+
+== Schema ==
+{{#cargo_declare:_table=Difficulty
+| id = String
+| name_sid = String
+| description = Wikitext
+| neutral_power_multiplier = Float
+| player_gold = Integer
+| player_wood = Integer
+| player_ore = Integer
+| player_gemstones = Integer
+| player_crystals = Integer
+| player_mercury = Integer
+| player_dust = Integer
+| ai_gold = Integer
+| ai_wood = Integer
+| ai_ore = Integer
+| ai_gemstones = Integer
+| ai_crystals = Integer
+| ai_mercury = Integer
+| ai_dust = Integer
+| source_path = String
+}}
+
+<pre><nowiki>
+{{DifficultyDef
+| id = String                      <!-- Easy / Normal / Hard / Expert / Impossible -->
+| name_sid = String                <!-- nullable; not actually in L10n corpus -->
+| description = Wikitext           <!-- literal English from source descriptionSid -->
+| neutral_power_multiplier = Float <!-- 0.5 / 0.75 / 1.0 / 1.5 / 2.0 -->
+| player_gold = Integer
+| player_wood = Integer
+| player_ore = Integer
+| player_gemstones = Integer
+| player_crystals = Integer
+| player_mercury = Integer
+| player_dust = Integer
+| ai_gold = Integer
+| ai_wood = Integer
+| ai_ore = Integer
+| ai_gemstones = Integer
+| ai_crystals = Integer
+| ai_mercury = Integer
+| ai_dust = Integer
+| source_path = String
+}}
+</nowiki></pre>
+
+== Field notes ==
+* '''<code>id</code>''' comes from the source <code>sid</code> field. Five fixed values; new difficulty tiers would be a balance change worth flagging.
+* '''<code>neutral_power_multiplier</code>''' is the headline balance number. 1.0 is "Hard" (the canonical reference point); Easy halves encounter strength, Impossible doubles it.
+* '''Resource columns''': source-side <code>alchemicalDust</code> is normalized to <code>dust</code> to match the canonical naming in [[Template:EntryDef|<code>Resource</code>]] (per <code>DB/res/resources_info.json</code>).
+* '''Asymmetry''': on Easy, the player starts with 3× the resources the AI does; this flips on Hard+, with the Impossible AI getting 5× the player's gold. That's the ''primary'' difficulty mechanism — <code>neutral_power_multiplier</code> only modulates map encounters.
+
+== Related tables ==
+* [[Template:EntryDef|<code>Resource</code>]] — the seven per-side <code><player|ai>_<resource></code> columns mirror the resource ids on the Resource Entry rows (gold / wood / ore / gemstones / crystals / mercury / dust).
+
+[[Category:Cargo Definitions]]
+</noinclude><includeonly>{{#cargo_store:_table=Difficulty
+| id = {{{id|}}}
+| name_sid = {{{name_sid|}}}
+| description = {{{description|}}}
+| neutral_power_multiplier = {{{neutral_power_multiplier|}}}
+| player_gold = {{{player_gold|}}}
+| player_wood = {{{player_wood|}}}
+| player_ore = {{{player_ore|}}}
+| player_gemstones = {{{player_gemstones|}}}
+| player_crystals = {{{player_crystals|}}}
+| player_mercury = {{{player_mercury|}}}
+| player_dust = {{{player_dust|}}}
+| ai_gold = {{{ai_gold|}}}
+| ai_wood = {{{ai_wood|}}}
+| ai_ore = {{{ai_ore|}}}
+| ai_gemstones = {{{ai_gemstones|}}}
+| ai_crystals = {{{ai_crystals|}}}
+| ai_mercury = {{{ai_mercury|}}}
+| ai_dust = {{{ai_dust|}}}
+| source_path = {{{source_path|}}}
+}}
+Created <code>Difficulty</code> entry: <code>{{{id|}}}</code></includeonly>

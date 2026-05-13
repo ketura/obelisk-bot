@@ -1,0 +1,48 @@
+<noinclude>
+One row per slot in a hero's starting army. Each hero has 1-3 '''primary''' slots (<code>variant=primary</code>) and 1 '''alt''' slot (<code>variant=alt</code>). Across the 108 faction heroes in the 2026-05-03 corpus: 100 have 3 primary slots, 5 have 2, 3 have 1; all 108 have exactly 1 alt slot.
+
+The bot emits these rows on the parent <code>Data:Hero/<id></code> page, after the <code><nowiki>{{HeroDef}}</nowiki></code> and <code><nowiki>{{TranslationDef}}</nowiki></code> blocks.
+
+== Schema ==
+{{#cargo_declare:_table=HeroStartSquad
+| hero_id = String
+| variant = String (allowed values=primary,alt)
+| slot = Integer
+| unit_sid = String
+| min = Integer
+| max = Integer
+}}
+
+<pre><nowiki>
+{{HeroStartSquadDef
+| hero_id = String                <!-- joins Hero.id -->
+| variant = String (allowed values=primary,alt)
+| slot = Integer                  <!-- 1-based position within the variant -->
+| unit_sid = String               <!-- joins Unit.id -->
+| min = Integer
+| max = Integer
+}}
+</nowiki></pre>
+
+== Field notes ==
+* '''Primary key is <code>(hero_id, variant, slot)</code>'''.
+* '''<code>variant</code>''' distinguishes the source's parallel arrays <code>startSquad</code> (primary) and <code>startSquadAlt</code> (alt). Source data has alt as always exactly 1 slot of the form <code>(unit_sid, min=1, max=1)</code> in the 2026-05-03 corpus, but the schema preserves min/max in case future patches diverge.
+* '''<code>unit_sid</code>''' references a <code>Unit.id</code> (e.g. <code>esquire</code>, <code>crossbowman</code>, <code>griffin</code>).
+* '''<code>min</code>/<code>max</code>''' define the random count range for that slot at battle start. Primary slots have meaningful ranges (e.g. 14-20 esquires); alt slots are typically 1-1.
+
+== Related tables ==
+* [[Template:HeroDef|Hero]] — joined on <code>hero_id = id</code> (N:1).
+* [[Template:UnitDef|Unit]] — joined on <code>unit_sid = id</code> (N:1).
+
+== Notes ==
+
+[[Category:Cargo Definitions]]
+</noinclude><includeonly>{{#cargo_store:_table=HeroStartSquad
+| hero_id = {{{hero_id|}}}
+| variant = {{{variant|}}}
+| slot = {{{slot|}}}
+| unit_sid = {{{unit_sid|}}}
+| min = {{{min|}}}
+| max = {{{max|}}}
+}}
+Created <code>HeroStartSquad</code> entry: <code>{{{hero_id|}}} (variant {{{variant|}}}, slot {{{slot|}}})</code></includeonly>

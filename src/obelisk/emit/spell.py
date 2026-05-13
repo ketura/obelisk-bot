@@ -62,7 +62,7 @@ def _spell_rank_field_order() -> tuple[str, ...]:
     for lang_dir in _TRANSLATION_LANG_ORDER:
         code = LANG_CODE[lang_dir]
         lang_cols.extend([
-            f"{code}_name", f"{code}_desc", f"{code}_bonus_description",
+            f"{code}_name", f"{code}_description", f"{code}_bonus_description",
         ])
     return base + tuple(lang_cols)
 
@@ -113,7 +113,7 @@ def _render_rank(
         if spell.name_sid:
             params[f"{code}_name"] = text(spell.name_sid, lang_dir)
         if rank.description_sid:
-            params[f"{code}_desc"] = text(rank.description_sid, lang_dir)
+            params[f"{code}_description"] = text(rank.description_sid, lang_dir)
         if rank.bonus_description_sid:
             params[f"{code}_bonus_description"] = text(
                 rank.bonus_description_sid, lang_dir,

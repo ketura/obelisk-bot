@@ -1,0 +1,157 @@
+<noinclude>
+A single shared table for '''all per-entity i18n payloads'''. Replaces the parallel <code>UnitTranslation</code>, <code>FactionTranslation</code>,
+<code>AttackPassiveTranslation</code>, … tables we used to ship — same shape,
+one row per (entity-type, entity-id) pair, discriminated by <code>type</code>. See D-026.
+
+The bot never extracts <code>TranslationDef</code> rows on their own; each parent entity's emit function appends a <code><nowiki>{{TranslationDef | type=… | …}}</nowiki></code> call to its own page, right after the entity's structural row. The
+<code><nowiki>{{TranslationDef}}</nowiki></code> MediaWiki template's job is to call <code>#cargo_store</code>
+on this table.
+
+== Schema ==
+{{#cargo_declare:_table=Translation
+| type = String
+| target_id = String
+| name_sid = String
+| desc_sid = String
+| pt_br_name = String
+| pt_br_description = Wikitext
+| cs_name = String
+| cs_description = Wikitext
+| fr_name = String
+| fr_description = Wikitext
+| de_name = String
+| de_description = Wikitext
+| hu_name = String
+| hu_description = Wikitext
+| it_name = String
+| it_description = Wikitext
+| ja_name = String
+| ja_description = Wikitext
+| ko_name = String
+| ko_description = Wikitext
+| pl_name = String
+| pl_description = Wikitext
+| ru_name = String
+| ru_description = Wikitext
+| es_name = String
+| es_description = Wikitext
+| tr_name = String
+| tr_description = Wikitext
+| uk_name = String
+| uk_description = Wikitext
+| zh_cn_name = String
+| zh_cn_description = Wikitext
+| zh_tw_name = String
+| zh_tw_description = Wikitext
+}}
+
+<pre><nowiki>
+{{TranslationDef
+| type = String              <!-- e.g. unit, faction, hero, hero_class, attack_passive -->
+| target_id = String         <!-- the parent entity's id (Unit.id, Faction.id, etc.) -->
+| name_sid = String
+| desc_sid = String
+
+<!-- Per-language pairs. Each language gets a name + desc column. -->
+| pt_br_name = String
+| pt_br_description = Wikitext
+| cs_name = String
+| cs_description = Wikitext
+| fr_name = String
+| fr_description = Wikitext
+| de_name = String
+| de_description = Wikitext
+| hu_name = String
+| hu_description = Wikitext
+| it_name = String
+| it_description = Wikitext
+| ja_name = String
+| ja_description = Wikitext
+| ko_name = String
+| ko_description = Wikitext
+| pl_name = String
+| pl_description = Wikitext
+| ru_name = String
+| ru_description = Wikitext
+| es_name = String
+| es_description = Wikitext
+| tr_name = String
+| tr_description = Wikitext
+| uk_name = String
+| uk_description = Wikitext
+| zh_cn_name = String
+| zh_cn_description = Wikitext
+| zh_tw_name = String
+| zh_tw_description = Wikitext
+}}
+</nowiki></pre>
+
+== Field notes ==
+* '''Primary key is <code>(type, target_id)</code>''' as a tuple. Joins from parent entities include the type discriminator: e.g. <code>Unit.id = Translation.target_id WHERE Translation.type='unit'</code>.
+* '''English defaults are ''not'' here.''' They live on each parent entity's row (<code>Unit.name</code>, <code>Faction.name</code>, <code>HeroClass.name</code>, etc.) so the most common query — "give me the English label for this unit" — needs only a single-table read. Translations are the i18n payload only.
+* '''Language-code mapping''' (game directory → two-letter code):
+** <code>BRportugese</code> → <code>pt_br</code>
+** <code>czech</code> → <code>cs</code>, <code>french</code> → <code>fr</code>, <code>german</code> → <code>de</code>, <code>hungarian</code> → <code>hu</code>, <code>italian</code> → <code>it</code>, <code>japanese</code> → <code>ja</code>, <code>korean</code> → <code>ko</code>, <code>polish</code> → <code>pl</code>, <code>russian</code> → <code>ru</code>, <code>spanish</code> → <code>es</code>, <code>turkish</code> → <code>tr</code>, <code>ukrainian</code> → <code>uk</code>
+** <code>zhCN</code> → <code>zh_cn</code>, <code>zhTW</code> → <code>zh_tw</code>
+* '''Sparse output''': any per-language slot the bot couldn't resolve is omitted. Some entities (e.g. faction-shared <code>magic_desc</code> / <code>might_desc</code> for HeroClass) deliberately reuse a single SID across many parents — those parents will all carry the same per-language text on their own Translation row.
+* '''The <code>desc</code> field is Wikitext''' because translations may include HTML-bold and HTML-italic tags from the L10n corpus, which the bot's resolver converts to wiki markup (<code>'''</code> and <code>''</code>) before storing.
+
+== Entity types currently emitted ==
+{| class="wikitable"
+! <code>type</code> !! Parent entity !! <code>target_id</code> !! Emit site
+|-
+| <code>unit</code> || [[../Unit|<code>UnitDef</code>]] || <code>Unit.id</code> || <code>emit_unit_page</code>
+|-
+| <code>unit_ability</code> || [[../UnitAbility|<code>UnitAbilityDef</code>]] || <code>UnitAbility.ability_id</code> (composite) || <code>emit_unit_page</code>
+|-
+| <code>attack_passive</code> || [[Template:AttackPassiveDef|<code>AttackPassiveDef</code>]] || <code>AttackPassive.attack_passive_id</code> || <code>emit_attack_passive_page</code>
+|-
+| <code>faction</code> || [[../Faction|<code>FactionDef</code>]] || <code>Faction.id</code> || <code>emit_faction_page</code>
+|}
+
+(Hero-side entries: <code>hero</code>, <code>hero_class</code>, <code>hero_specialization</code>,
+<code>hero_sub_class</code> — added as those entities come online.)
+
+== Page layout ==
+Translation rows do '''not''' live on their own wiki pages. Each row is emitted as a <code><nowiki>{{TranslationDef | …}}</nowiki></code> invocation on the parent entity's data page, immediately after the entity's structural row. The
+<code>(type, target_id)</code> discriminator means Cargo can store many rows in
+a single table without page-naming collisions.
+
+[[Category:Cargo Definitions]]
+</noinclude><includeonly>{{#cargo_store:_table=Translation
+| type = {{{type|}}}
+| target_id = {{{target_id|}}}
+| name_sid = {{{name_sid|}}}
+| desc_sid = {{{desc_sid|}}}
+| pt_br_name = {{{pt_br_name|}}}
+| pt_br_description = {{{pt_br_description|}}}
+| cs_name = {{{cs_name|}}}
+| cs_description = {{{cs_description|}}}
+| fr_name = {{{fr_name|}}}
+| fr_description = {{{fr_description|}}}
+| de_name = {{{de_name|}}}
+| de_description = {{{de_description|}}}
+| hu_name = {{{hu_name|}}}
+| hu_description = {{{hu_description|}}}
+| it_name = {{{it_name|}}}
+| it_description = {{{it_description|}}}
+| ja_name = {{{ja_name|}}}
+| ja_description = {{{ja_description|}}}
+| ko_name = {{{ko_name|}}}
+| ko_description = {{{ko_description|}}}
+| pl_name = {{{pl_name|}}}
+| pl_description = {{{pl_description|}}}
+| ru_name = {{{ru_name|}}}
+| ru_description = {{{ru_description|}}}
+| es_name = {{{es_name|}}}
+| es_description = {{{es_description|}}}
+| tr_name = {{{tr_name|}}}
+| tr_description = {{{tr_description|}}}
+| uk_name = {{{uk_name|}}}
+| uk_description = {{{uk_description|}}}
+| zh_cn_name = {{{zh_cn_name|}}}
+| zh_cn_description = {{{zh_cn_description|}}}
+| zh_tw_name = {{{zh_tw_name|}}}
+| zh_tw_description = {{{zh_tw_description|}}}
+}}
+Created <code>Translation</code> entry: <code>{{{type|}}}/{{{target_id|}}}</code></includeonly>

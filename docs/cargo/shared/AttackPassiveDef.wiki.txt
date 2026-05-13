@@ -1,0 +1,83 @@
+<noinclude>
+Shared reference table for '''named attack-pattern passives''' — the side-effects-of-default-attack abilities that show up in unit tooltips as passives (e.g. Hydra has "Sweeping Strike" inherent to its standard melee attack). One row per (pattern_token, rank) pair; ~9 rows total.
+
+The bot does not maintain rows here directly; this is hand-curated reference data the wiki ships pre-populated. <code>UnitAttackDef</code> slots reference the <code>attack_passive_id</code> enum; the wiki layer joins to render the player-facing name and description.
+
+'''Why this is shared, not per-unit:''' every Hydra / Lich Dragon / Sweeping-pattern user sees the same Sweeping Strike text. Storing it once and referencing it by id (instead of inlining the text on each unit page) cuts duplicate spam from i18n storage and lets editors fix typos in one place.
+
+== Schema ==
+{{#cargo_declare:_table=AttackPassive
+| attack_passive_id = String
+| pattern_token = String (allowed values=swipe,swirl,reach,rumble,tri_reach)
+| rank = Integer
+| name_sid = String
+| desc_sid = String
+| display_name = String
+| description = Wikitext
+}}
+
+<pre><nowiki>
+{{AttackPassiveDef
+| attack_passive_id = String                                <!-- enum value referenced by UnitAttack slots -->
+| pattern_token = String (allowed values=swipe,swirl,reach,rumble,tri_reach)
+| rank = Integer                                            <!-- 1 = no falloff; 2 = -X% to additional targets -->
+| name_sid = String                                         <!-- base_passive_strike_<token>_<rank>_name -->
+| desc_sid = String
+| display_name = String
+| description = Wikitext
+}}
+</nowiki></pre>
+
+== Field notes ==
+* '''<code>attack_passive_id</code>''' is the primary key and the value <code>UnitAttackDef</code> rows reference (<code>default_passive</code>, <code>counter_passive</code>, <code>alt_passive</code>, <code>alt2_passive</code>). Stable, lowercase, snake_case.
+* '''<code>pattern_token</code>''' is the L10n SID's family token. Drives the <code>name_sid</code> / <code>desc_sid</code> derivation. Five canonical families.
+* '''<code>rank</code>''' distinguishes the falloff variant. Rank 1 = full damage to all hexes; rank 2 = additional targets take <code>–{0}%</code> damage (the percentage is unit-level — the <code>{0}</code> placeholder gets resolved per unit via <code>data.stats</code> blocks if present).
+* '''<code>name_sid</code> / <code>desc_sid</code>''' point at L10n entries. The translation table joins on these.
+* '''<code>display_name</code>''' / '''<code>description</code>''' are the resolved English defaults that render directly on the wiki without a join lookup.
+
+== Canonical row contents ==
+{| class="wikitable"
+! <code>attack_passive_id</code> !! <code>pattern_token</code> !! <code>rank</code> !! <code>display_name</code> !! engine pattern_sid(s)
+|-
+| <code>sweeping_strike</code> || swipe || 1 || Sweeping Strike || <code>attack_swipe_x100_x100</code>
+|-
+| <code>sweeping_strike_falloff</code> || swipe || 2 || Sweeping Strike || (rank-2 swipe; no current units use this)
+|-
+| <code>whirlwind_strike</code> || swirl || 1 || Whirlwind Strike || <code>attack_swirl_with_target_x100</code>, <code>attack_swirl_x1_x100</code>
+|-
+| <code>whirlwind_strike_falloff</code> || swirl || 2 || Whirlwind Strike || <code>attack_swirl_with_target_x50</code>, <code>attack_swirl_x2_x100</code>
+|-
+| <code>dragonbreath_strike</code> || reach || 1 || Dragonbreath Strike || <code>attack_reach_x1_x100_x100_with_delay</code>, <code>attack_reach_x1_x100_x100</code>
+|-
+| <code>dragonbreath_strike_falloff</code> || reach || 2 || Dragonbreath Strike || <code>attack_reach_x2_x100_x100_x100_with_delay</code>
+|-
+| <code>area_strike</code> || rumble || 1 || Area Strike || <code>attack_rumble_x1_x100</code>, <code>attack_rumble_without_self_x1_x100_x100</code>
+|-
+| <code>area_strike_falloff</code> || rumble || 2 || Area Strike || <code>attack_rumble_x1_x100_x50</code>, <code>attack_rumble_without_self_x1_x100_x50</code>, <code>attack_rumble_x2_x100</code>
+|-
+| <code>cone_strike</code> || tri_reach || 1 || Cone Strike || <code>attack_swipe_x100_x100_x2</code>, <code>attack_massive_x1_x100_x100_with_dalay</code>
+|}
+
+The engine pattern_sid → attack_passive_id mapping lives in
+<code>extract/_pattern_passive_map.py</code>. Some mappings are non-trivial:
+<code>attack_massive_*</code> → <code>cone_strike</code> is confirmed via Black Dragon's
+Fighting Style ability text ("Performs a Cone Strike").
+
+== Out of scope here ==
+'' '''Piercing Strike''' (<code>base_passive_strike_pierce_<rank>_''</code>) is '''not''' an attack-pattern passive. It's the player-facing name for the <code>attackPen</code> stat-passive and lives in the existing <code>stat_passive</code> synthesis path, not in <code>AttackPassiveDef</code>.
+
+== Related tables ==
+* [[../UnitAttack|<code>UnitAttackDef</code>]] — references via <code>default_passive</code>, <code>counter_passive</code>, <code>alt_passive</code>, <code>alt2_passive</code> (N:1 each).
+* [[AttackPassiveTranslation]] — joined on <code>attack_passive_id</code> (1:1).
+
+[[Category:Cargo Definitions]]
+</noinclude><includeonly>{{#cargo_store:_table=AttackPassive
+| attack_passive_id = {{{attack_passive_id|}}}
+| pattern_token = {{{pattern_token|}}}
+| rank = {{{rank|}}}
+| name_sid = {{{name_sid|}}}
+| desc_sid = {{{desc_sid|}}}
+| display_name = {{{display_name|}}}
+| description = {{{description|}}}
+}}
+Created <code>AttackPassive</code> entry: <code>{{{attack_passive_id|}}}</code></includeonly>

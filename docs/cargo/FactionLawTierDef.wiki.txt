@@ -1,0 +1,39 @@
+<noinclude>
+One row per (faction, tier) pair — 30 rows total (6 factions × 5 tiers). Captures the law-points threshold a player must accumulate before any tier-N law in a given faction becomes enactable.
+
+In the 2026-05-05 corpus all six factions ship identical thresholds (<code>[0, 5, 15, 30, 50]</code>). Stored per-faction so a future patch can rebalance one faction independently.
+
+== Page layout ==
+<code>FactionLawTierDef</code> rows are emitted inline on the parent <code>FactionDef</code> page alongside the <code>LawTreePositionDef</code> rows.
+
+== Schema ==
+{{#cargo_declare:_table=FactionLawTier
+| faction = String
+| tier = Integer
+| count_to_unlock = Integer
+}}
+
+<pre><nowiki>
+{{FactionLawTierDef
+| faction = String           <!-- human, demon, dungeon, nature, undead, unfrozen -->
+| tier = Integer             <!-- 1-5 -->
+| count_to_unlock = Integer  <!-- law points required to unlock laws in this tier -->
+}}
+</nowiki></pre>
+
+== Field notes ==
+* '''Primary key is <code>(faction, tier)</code>'''.
+* '''<code>count_to_unlock</code>''' is sourced from <code>fractionLawsLines[tier-1].countToUnlock</code>.
+* Tier 1 always has <code>count_to_unlock = 0</code> (no entry threshold); higher tiers progressively gate.
+
+== Related tables ==
+* [[Template:LawTreePositionDef|LawTreePosition]] — joined on <code>(faction, tier)</code>.
+* [[Template:FactionDef|Faction]] — joined on <code>faction = Faction.id</code>.
+
+[[Category:Cargo Definitions]]
+</noinclude><includeonly>{{#cargo_store:_table=FactionLawTier
+| faction = {{{faction|}}}
+| tier = {{{tier|}}}
+| count_to_unlock = {{{count_to_unlock|}}}
+}}
+Created <code>FactionLawTier</code> entry: <code>{{{faction|}}} (tier {{{tier|}}})</code></includeonly>

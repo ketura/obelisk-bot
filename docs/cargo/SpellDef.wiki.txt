@@ -1,0 +1,112 @@
+<noinclude>
+One row per spell. ~137 in the 2026-05-03 corpus across 5 schools (day, night, primal, space, neutral) and 5 ranks. Includes battle spells (cast in combat), world spells (cast on the adventure map), and <code>_special</code> upgraded variants.
+
+The bot emits each spell at <code>Data:Spell/<id></code> carrying:
+
+# <code><nowiki>{{SpellDef | id=… | name=… | school=… | rank=… | …}}</nowiki></code> — main row with the split learn-cost columns inline.
+# 4 × <code><nowiki>{{SpellRankDef | spell_id=<id> | level=<1-4> | …}}</nowiki></code> paired with 4 × <code><nowiki>{{SpellRankTranslationDef | spell_id=<id> | level=<1-4> | …}}</nowiki></code> — one pair per mastery level (1=no skill, 2=basic, 3=advanced, 4=expert). Spells use the dedicated SpellRankTranslation table instead of the unified Translation (per D-030 revised) because the per-rank shape carries 3 localizable fields (name + desc + bonus_description) rather than the standard 2.
+
+== Schema ==
+{{#cargo_declare:_table=Spell
+| id = String
+| name = String
+| name_sid = String
+| school = String (allowed values=day,night,primal,space,neutral)
+| rank = Integer
+| used_on_map = Boolean
+| icon = String
+| magic_type_description = String
+| is_special_magic = Boolean
+| is_unique_magic = Boolean
+| normal_magic_sid = String
+| learn_cost_gemstones = Integer
+| learn_cost_crystals = Integer
+| learn_cost_mercury = Integer
+| learn_cost_star_dust = Integer
+| excaption_in_tooltip_sid = String
+| up_effect_description_sid = String
+| use_expand_tooltip = Boolean
+| energy_cost = Integer
+| energy_type = String
+| source_path = String
+}}
+
+<pre><nowiki>
+{{SpellDef
+| id = String
+| name = String
+| name_sid = String
+
+| school = String (allowed values=day,night,primal,space,neutral)
+| rank = Integer
+| used_on_map = Boolean
+
+| icon = String
+
+| magic_type_description = String       <!-- SID for the type label, e.g. magic_type_healing -->
+
+<!-- Special-magic flags -->
+| is_special_magic = Boolean
+| is_unique_magic = Boolean
+| normal_magic_sid = String             <!-- back-ref for is_special_magic spells -->
+
+<!-- Learn-cost split per resource. Sparse: zero/missing → omitted.
+     Most spells use gemstones/crystals/mercury (94 spells); a small
+     set of unique magics use star_dust (6 spells). -->
+| learn_cost_gemstones = Integer
+| learn_cost_crystals = Integer
+| learn_cost_mercury = Integer
+| learn_cost_star_dust = Integer
+
+<!-- Misc sparse fields -->
+| excaption_in_tooltip_sid = String     <!-- e.g. immunity callouts (note source typo "excaption") -->
+| up_effect_description_sid = String
+| use_expand_tooltip = Boolean
+| energy_cost = Integer
+| energy_type = String
+
+| source_path = String
+}}
+</nowiki></pre>
+
+== Field notes ==
+* '''<code>id</code>''' is the source JSON id (e.g. <code>day_1_magic_healing_water</code>, <code>day_1_magic_healing_water_special</code>).
+* '''<code>school</code>''' is one of 5: <code>day</code>, <code>night</code>, <code>primal</code>, <code>space</code>, <code>neutral</code>.
+* '''<code>rank</code>''' is 1-5; the spell's intrinsic difficulty/tier.
+* '''<code>used_on_map</code>''' distinguishes battle vs world spells. <code>worldMagic</code> and <code>battleMagic</code> sub-trees are not extracted as Cargo columns yet — they describe the in-game effect mechanics in detail; future work if a wiki need surfaces.
+* '''Special magics''' (<code>is_special_magic=true</code>) point back at the base spell via <code>normal_magic_sid</code>. These are upgraded variants unlocked by certain heroes' specializations.
+* '''<code>excaption_in_tooltip_sid</code>''' — source field name preserves the typo (<code>excaption</code> instead of <code>exception</code>); it points at SIDs like <code>description_effect_undead_embodiment_construct_immunities</code> ("Does not affect Undead, Embodiments, or Constructs"). The bot passes the source name through unchanged.
+* '''No <code>desc_sid</code> here.''' Spell descriptions vary by mastery level and live on the SpellRank rows.
+
+== Related tables ==
+* [[Template:SpellRankDef|SpellRank]] — joined on <code>id = spell_id</code> (1:N, 4 rows per spell).
+* [[SpellRankTranslationDef]] — joined on <code>id = spell_id</code> (1:N, 4 rows per spell). Carries the i18n payload for spell name + per-rank desc + per-rank bonus_description.
+* <code>Hero.start_magics</code> — references spell ids via the comma-joined list column.
+
+== Notes ==
+
+[[Category:Cargo Definitions]]
+</noinclude><includeonly>{{#cargo_store:_table=Spell
+| id = {{{id|}}}
+| name = {{{name|}}}
+| name_sid = {{{name_sid|}}}
+| school = {{{school|}}}
+| rank = {{{rank|}}}
+| used_on_map = {{{used_on_map|}}}
+| icon = {{{icon|}}}
+| magic_type_description = {{{magic_type_description|}}}
+| is_special_magic = {{{is_special_magic|}}}
+| is_unique_magic = {{{is_unique_magic|}}}
+| normal_magic_sid = {{{normal_magic_sid|}}}
+| learn_cost_gemstones = {{{learn_cost_gemstones|}}}
+| learn_cost_crystals = {{{learn_cost_crystals|}}}
+| learn_cost_mercury = {{{learn_cost_mercury|}}}
+| learn_cost_star_dust = {{{learn_cost_star_dust|}}}
+| excaption_in_tooltip_sid = {{{excaption_in_tooltip_sid|}}}
+| up_effect_description_sid = {{{up_effect_description_sid|}}}
+| use_expand_tooltip = {{{use_expand_tooltip|}}}
+| energy_cost = {{{energy_cost|}}}
+| energy_type = {{{energy_type|}}}
+| source_path = {{{source_path|}}}
+}}
+Created <code>Spell</code> entry: <code>{{{id|}}}</code></includeonly>

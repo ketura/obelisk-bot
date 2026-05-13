@@ -1,0 +1,51 @@
+<noinclude>
+Splinter for <code>ability_type = conditional_passive</code>. Encodes "if condition is met, the unit gets stat bonus X." 17 instances in the 2026-05-03 corpus, mostly the demon-faction "if your army has N unique demons" pattern.
+
+Join to <code>UnitAbilityDef</code> on <code>ability_id</code>.
+
+== Schema ==
+{{#cargo_declare:_table=UnitAbilityConditional
+| ability_id = String
+| condition_check = String
+| condition_target = String
+| condition_value = String
+| affected_stat = String
+| affected_stat_amount = Float
+}}
+
+<pre><nowiki>
+{{UnitAbilityConditionalDef
+| ability_id = String                         <!-- FK -> UnitAbility.ability_id -->
+| condition_check = String                    <!-- e.g. "unique_units_count" -->
+| condition_target = String                   <!-- e.g. "ally" -->
+| condition_value = String                    <!-- e.g. "demon" -->
+| affected_stat = String
+| affected_stat_amount = Float
+}}
+</nowiki></pre>
+
+== Field notes ==
+'' ''*<code>condition_*</code> fields decompose** the source JSON's positional triple <code>["unique_units_count", "ally", "demon"]</code> into three columns. This matches the structure of every conditional passive in the current corpus — the check function name, the side it applies to, and the parameter the check requires.
+* '''<code>condition_check</code> enum values''' seen in the wild:
+** <code>unique_units_count</code> — "you have N or more units of a faction"
+** <code>unique_fractions_buff</code> — variant on the same theme
+** More may surface in future patches; treat as open-string.
+* '''<code>condition_target</code>:''' typically <code>ally</code> or <code>enemy</code>.
+* '''<code>condition_value</code>:''' a faction id (<code>demon</code>, <code>human</code>, …) or similar discriminator. Always a string.
+* '''<code>affected_stat</code> / <code>affected_stat_amount</code>''' describe the bonus granted when the condition fires. The current corpus has at most one stat per conditional passive, so a single pair suffices. If a future patch adds multi-stat conditionals, this would become a list — handle by extending the splinter or moving to a side table.
+
+== Related tables ==
+* [[Template:UnitAbilityDef|UnitAbility]] — parent (1:1 on <code>ability_id</code>).
+
+== Notes ==
+
+[[Category:Cargo Definitions]]
+</noinclude><includeonly>{{#cargo_store:_table=UnitAbilityConditional
+| ability_id = {{{ability_id|}}}
+| condition_check = {{{condition_check|}}}
+| condition_target = {{{condition_target|}}}
+| condition_value = {{{condition_value|}}}
+| affected_stat = {{{affected_stat|}}}
+| affected_stat_amount = {{{affected_stat_amount|}}}
+}}
+Created <code>UnitAbilityConditional</code> entry: <code>{{{ability_id|}}}</code></includeonly>

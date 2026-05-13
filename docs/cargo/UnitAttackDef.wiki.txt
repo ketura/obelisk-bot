@@ -1,0 +1,281 @@
+<noinclude>
+'''One row per unit.''' All four attack slots — <code>default</code>, <code>counter</code>,
+<code>alt</code>, <code>alt2</code> — collapse onto a single wide row, with each slot's
+fields prefixed by the slot name. Pattern-passives like Sweeping Strike / Whirlwind / Dragonbreath aren't duplicated on every page; each slot references a shared [[Template:AttackPassiveDef|<code>AttackPassiveDef</code>]] row by <code>attack_passive_id</code>.
+
+This pivot from one-row-per-slot to one-row-per-unit landed because (a) "list this unit's attacks" is the dominant query, and a single fat row beats <code>GROUP BY unit_id</code> joins; (b) per-slot rows would duplicate identity columns four ways for no benefit.
+
+== Schema ==
+{{#cargo_declare:_table=UnitAttack
+| unit_id = String
+| default_attack_type = String (allowed values=melee,ranged,reach)
+| default_pattern_sid = String
+| default_passive = String
+| default_stat_dmg_mult = Float
+| default_damage_target = String
+| default_affect_target = String
+| default_trigger_counter = Boolean
+| default_damage_type = String
+| default_buff_sid = String
+| default_buff_target = String
+| default_buff_duration = Integer
+| default_is_armed_ability = Boolean
+| default_temp_self_buff = String
+| default_dont_trigger_energy_regen = Boolean
+| counter_attack_type = String (allowed values=melee,ranged,reach)
+| counter_pattern_sid = String
+| counter_passive = String
+| counter_stat_dmg_mult = Float
+| counter_damage_target = String
+| counter_affect_target = String
+| counter_trigger_counter = Boolean
+| counter_damage_type = String
+| counter_buff_sid = String
+| counter_buff_target = String
+| counter_buff_duration = Integer
+| counter_is_armed_ability = Boolean
+| alt_attack_type = String (allowed values=melee,ranged,reach)
+| alt_pattern_sid = String
+| alt_passive = String
+| alt_stat_dmg_mult = Float
+| alt_damage_target = String
+| alt_affect_target = String
+| alt_trigger_counter = Boolean
+| alt_damage_type = String
+| alt_buff_sid = String
+| alt_buff_target = String
+| alt_buff_duration = Integer
+| alt_cd = Integer
+| alt_dont_use_energy = Boolean
+| alt_return_to_start_after_attack = Boolean
+| alt_never_disable = Boolean
+| alt_temp_self_buff = String
+| alt_dont_trigger_energy_regen = Boolean
+| alt_multitarget_type = String
+| alt_num_targets = Integer
+| alt_is_armed_ability = Boolean
+| alt2_attack_type = String (allowed values=melee,ranged,reach)
+| alt2_pattern_sid = String
+| alt2_passive = String
+| alt2_stat_dmg_mult = Float
+| alt2_damage_target = String
+| alt2_affect_target = String
+| alt2_trigger_counter = Boolean
+| alt2_damage_type = String
+| alt2_buff_sid = String
+| alt2_buff_target = String
+| alt2_buff_duration = Integer
+| alt2_cd = Integer
+| alt2_dont_use_energy = Boolean
+| alt2_return_to_start_after_attack = Boolean
+| alt2_never_disable = Boolean
+| alt2_temp_self_buff = String
+| alt2_dont_trigger_energy_regen = Boolean
+| alt2_multitarget_type = String
+| alt2_num_targets = Integer
+| alt2_is_armed_ability = Boolean
+}}
+
+<pre><nowiki>
+{{UnitAttackDef
+| unit_id = String                                          <!-- primary key -->
+
+<!-- DEFAULT slot — what the unit does on a normal attack action. -->
+| default_attack_type = String (allowed values=melee,ranged,reach)
+| default_pattern_sid = String                              <!-- engine pattern; usually omitted (derivable from passive) -->
+| default_passive = String                                  <!-- FK -> AttackPassive (or NULL) -->
+| default_stat_dmg_mult = Float                             <!-- override; default 1.0 -->
+| default_damage_target = String                            <!-- enemy | all | none ; default enemy -->
+| default_affect_target = String                            <!-- enemy | noself | ally | … ; default enemy -->
+| default_trigger_counter = Boolean                         <!-- default true -->
+| default_damage_type = String                              <!-- normal | absolute | magic_pure ; default normal -->
+| default_buff_sid = String                                 <!-- on-hit debuff slot -->
+| default_buff_target = String
+| default_buff_duration = Integer
+| default_is_armed_ability = Boolean                        <!-- default false -->
+| default_temp_self_buff = String
+| default_dont_trigger_energy_regen = Boolean
+
+<!-- COUNTER slot — what the unit does when retaliating. -->
+| counter_attack_type = String (allowed values=melee,ranged,reach)
+| counter_pattern_sid = String
+| counter_passive = String
+| counter_stat_dmg_mult = Float
+| counter_damage_target = String
+| counter_affect_target = String
+| counter_trigger_counter = Boolean                         <!-- default false (counters don't counter the counter) -->
+| counter_damage_type = String
+| counter_buff_sid = String
+| counter_buff_target = String
+| counter_buff_duration = Integer
+| counter_is_armed_ability = Boolean
+
+<!-- ALT slot — situational fallback / Fighting Style / once-per-battle. -->
+| alt_attack_type = String (allowed values=melee,ranged,reach)
+| alt_pattern_sid = String
+| alt_passive = String
+| alt_stat_dmg_mult = Float                                 <!-- default 0.5 -->
+| alt_damage_target = String
+| alt_affect_target = String
+| alt_trigger_counter = Boolean                             <!-- default false -->
+| alt_damage_type = String
+| alt_buff_sid = String
+| alt_buff_target = String
+| alt_buff_duration = Integer
+| alt_cd = Integer                                          <!-- -1 = once per battle -->
+| alt_dont_use_energy = Boolean
+| alt_return_to_start_after_attack = Boolean
+| alt_never_disable = Boolean
+| alt_temp_self_buff = String
+| alt_dont_trigger_energy_regen = Boolean
+| alt_multitarget_type = String                             <!-- ordered | simultaneous -->
+| alt_num_targets = Integer
+| alt_is_armed_ability = Boolean
+
+<!-- ALT2 slot — same shape as alt. Only Medusa and a handful use this. -->
+| alt2_attack_type = String (allowed values=melee,ranged,reach)
+| alt2_pattern_sid = String
+| alt2_passive = String
+| alt2_stat_dmg_mult = Float
+| alt2_damage_target = String
+| alt2_affect_target = String
+| alt2_trigger_counter = Boolean
+| alt2_damage_type = String
+| alt2_buff_sid = String
+| alt2_buff_target = String
+| alt2_buff_duration = Integer
+| alt2_cd = Integer
+| alt2_dont_use_energy = Boolean
+| alt2_return_to_start_after_attack = Boolean
+| alt2_never_disable = Boolean
+| alt2_temp_self_buff = String
+| alt2_dont_trigger_energy_regen = Boolean
+| alt2_multitarget_type = String
+| alt2_num_targets = Integer
+| alt2_is_armed_ability = Boolean
+}}
+</nowiki></pre>
+
+== Field notes — slot conventions ==
+* '''<code><slot>_attack_type</code>''' is the only slot field that's always present when the slot itself is populated. If the unit has no slot of a given category, ''all'' <code><slot>_*</code> columns are NULL/absent.
+* '''<code><slot>_passive</code>''' references [[Template:AttackPassiveDef|<code>AttackPassiveDef</code>]] by id. Most units leave this NULL (their attack pattern is plain <code>attack_single_x100</code> with no special passive). Patterns that resolve to a known passive get the id; unknown patterns fall back to a <code>pattern_passive_TODO_<pattern_sid></code> placeholder so the gap is visible.
+* '''<code><slot>_pattern_sid</code>''' is usually omitted — the canonical pattern is implied by the passive_id. The bot only emits this when the unit's actual pattern differs from the passive's canonical sid (rare, e.g. <code>attack_reach_x2_x100_x100_x100_with_delay</code> is rank-2 of the Dragonbreath family; the bot stores the variant for forensic visibility).
+
+== Field notes — defaults ==
+The wiki template provides typed defaults; the bot omits any column whose value matches the default. Slot-specific defaults:
+
+{| class="wikitable"
+! Field !! <code>default_*</code> !! <code>counter_*</code> !! <code>alt_*</code> / <code>alt2_*</code>
+|-
+| <code>stat_dmg_mult</code> || <code>1.0</code> || <code>1.0</code> || <code>0.5</code>
+|-
+| <code>trigger_counter</code> || <code>true</code> || <code>false</code> || <code>false</code>
+|-
+| <code>damage_target</code> || <code>enemy</code> || <code>enemy</code> || <code>enemy</code>
+|-
+| <code>affect_target</code> || <code>enemy</code> || <code>enemy</code> || <code>enemy</code>
+|-
+| <code>damage_type</code> || <code>normal</code> || <code>normal</code> || <code>normal</code>
+|}
+
+Flat defaults (same regardless of slot):
+
+* <code>is_armed_ability</code>, <code>dont_trigger_energy_regen</code>, <code>dont_use_energy</code>, <code>return_to_start_after_attack</code>, <code>never_disable</code> → <code>false</code>
+* <code>cd</code> → <code>0</code> for default/counter, <code>-1</code> for <code>alt</code>/<code>alt2</code> is '''not''' the default (Crossbowman's plain melee fallback has cd=0). The template defaults <code><alt>_cd</code> to <code>0</code>; Fighting Style alts emit <code>cd=-1</code> explicitly.
+'' <code>pattern_sid</code>, <code>passive</code>, <code>buff_''</code>, <code>temp_self_buff</code>, <code>multitarget_type</code>, <code>num_targets</code> → NULL
+
+== Field notes — slot rarity ==
+{| class="wikitable"
+! Slot !! Population rate !! Notes
+|-
+| <code>default_*</code> || ~99% of units || Almost everyone has a default attack
+|-
+| <code>counter_*</code> || ~99% of units || Almost everyone has a counter
+|-
+| <code>alt_*</code> || ~50% of units || Ranged units' melee fallback, Fighting Style alts
+|-
+| <code>alt2_*</code> || ~3% of units || Medusa-tier (melee fallback + Arrow Barrage)
+|}
+
+Wide schema, sparse data: the typical row emits ~5 lines (the slot fields that deviate from defaults, plus identity columns).
+
+== Sentinels ==
+* <code><alt>_cd = -1</code> → once per battle.
+* <code><slot>_buff_duration = -1</code> → infinite; <code>999</code> → until end of battle.
+
+== Related tables ==
+* [[AttackArchetype]] — joined on <code><slot>_attack_type</code> (3 rows; canned per-attack-type description).
+* [[Template:AttackPassiveDef|<code>AttackPassiveDef</code>]] — joined on <code><slot>_passive</code> (4 references per row).
+* [[Template:UnitDef|Unit]] — joined on <code>unit_id = id</code> (1:1).
+
+[[Category:Cargo Definitions]]
+</noinclude><includeonly>{{#cargo_store:_table=UnitAttack
+| unit_id = {{{unit_id|}}}
+| default_attack_type = {{{default_attack_type|}}}
+| default_pattern_sid = {{{default_pattern_sid|}}}
+| default_passive = {{{default_passive|}}}
+| default_stat_dmg_mult = {{{default_stat_dmg_mult|}}}
+| default_damage_target = {{{default_damage_target|}}}
+| default_affect_target = {{{default_affect_target|}}}
+| default_trigger_counter = {{{default_trigger_counter|}}}
+| default_damage_type = {{{default_damage_type|}}}
+| default_buff_sid = {{{default_buff_sid|}}}
+| default_buff_target = {{{default_buff_target|}}}
+| default_buff_duration = {{{default_buff_duration|}}}
+| default_is_armed_ability = {{{default_is_armed_ability|}}}
+| default_temp_self_buff = {{{default_temp_self_buff|}}}
+| default_dont_trigger_energy_regen = {{{default_dont_trigger_energy_regen|}}}
+| counter_attack_type = {{{counter_attack_type|}}}
+| counter_pattern_sid = {{{counter_pattern_sid|}}}
+| counter_passive = {{{counter_passive|}}}
+| counter_stat_dmg_mult = {{{counter_stat_dmg_mult|}}}
+| counter_damage_target = {{{counter_damage_target|}}}
+| counter_affect_target = {{{counter_affect_target|}}}
+| counter_trigger_counter = {{{counter_trigger_counter|}}}
+| counter_damage_type = {{{counter_damage_type|}}}
+| counter_buff_sid = {{{counter_buff_sid|}}}
+| counter_buff_target = {{{counter_buff_target|}}}
+| counter_buff_duration = {{{counter_buff_duration|}}}
+| counter_is_armed_ability = {{{counter_is_armed_ability|}}}
+| alt_attack_type = {{{alt_attack_type|}}}
+| alt_pattern_sid = {{{alt_pattern_sid|}}}
+| alt_passive = {{{alt_passive|}}}
+| alt_stat_dmg_mult = {{{alt_stat_dmg_mult|}}}
+| alt_damage_target = {{{alt_damage_target|}}}
+| alt_affect_target = {{{alt_affect_target|}}}
+| alt_trigger_counter = {{{alt_trigger_counter|}}}
+| alt_damage_type = {{{alt_damage_type|}}}
+| alt_buff_sid = {{{alt_buff_sid|}}}
+| alt_buff_target = {{{alt_buff_target|}}}
+| alt_buff_duration = {{{alt_buff_duration|}}}
+| alt_cd = {{{alt_cd|}}}
+| alt_dont_use_energy = {{{alt_dont_use_energy|}}}
+| alt_return_to_start_after_attack = {{{alt_return_to_start_after_attack|}}}
+| alt_never_disable = {{{alt_never_disable|}}}
+| alt_temp_self_buff = {{{alt_temp_self_buff|}}}
+| alt_dont_trigger_energy_regen = {{{alt_dont_trigger_energy_regen|}}}
+| alt_multitarget_type = {{{alt_multitarget_type|}}}
+| alt_num_targets = {{{alt_num_targets|}}}
+| alt_is_armed_ability = {{{alt_is_armed_ability|}}}
+| alt2_attack_type = {{{alt2_attack_type|}}}
+| alt2_pattern_sid = {{{alt2_pattern_sid|}}}
+| alt2_passive = {{{alt2_passive|}}}
+| alt2_stat_dmg_mult = {{{alt2_stat_dmg_mult|}}}
+| alt2_damage_target = {{{alt2_damage_target|}}}
+| alt2_affect_target = {{{alt2_affect_target|}}}
+| alt2_trigger_counter = {{{alt2_trigger_counter|}}}
+| alt2_damage_type = {{{alt2_damage_type|}}}
+| alt2_buff_sid = {{{alt2_buff_sid|}}}
+| alt2_buff_target = {{{alt2_buff_target|}}}
+| alt2_buff_duration = {{{alt2_buff_duration|}}}
+| alt2_cd = {{{alt2_cd|}}}
+| alt2_dont_use_energy = {{{alt2_dont_use_energy|}}}
+| alt2_return_to_start_after_attack = {{{alt2_return_to_start_after_attack|}}}
+| alt2_never_disable = {{{alt2_never_disable|}}}
+| alt2_temp_self_buff = {{{alt2_temp_self_buff|}}}
+| alt2_dont_trigger_energy_regen = {{{alt2_dont_trigger_energy_regen|}}}
+| alt2_multitarget_type = {{{alt2_multitarget_type|}}}
+| alt2_num_targets = {{{alt2_num_targets|}}}
+| alt2_is_armed_ability = {{{alt2_is_armed_ability|}}}
+}}
+Created <code>UnitAttack</code> entry: <code>{{{unit_id|}}}</code></includeonly>

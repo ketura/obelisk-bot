@@ -1,0 +1,53 @@
+<noinclude>
+One row per law placement in a faction's law screen. Production laws (~198) each get exactly one row; test laws get none (they don't appear in any faction's <code>fractionLawsLines</code>).
+
+Captures the ''display'' layout of the law tree as shown in-game: which side (Faction column / Army column), which slot within that side, and which tier row. The balance-relevant <code>tier</code> is duplicated here from <code>Law.tier</code> for convenience — <code>LawTreePositionDef</code> is the table to query when reconstructing the screen layout, while <code>Law.tier</code> is the table to query when asking "where in the balance-tree does this law live."
+
+== Page layout ==
+<code>LawTreePositionDef</code> rows are emitted inline on the parent <code>FactionDef</code> page (no separate <code>Data:LawTreePosition/…</code> pages):
+
+<pre>
+{{LawTreePositionDef | faction=human | tier=1 | side=faction | slot=0 | law_id=fraction_law_human_3}}
+{{LawTreePositionDef | faction=human | tier=1 | side=faction | slot=1 | law_id=fraction_law_human_2}}
+…
+</pre>
+
+== Schema ==
+{{#cargo_declare:_table=LawTreePosition
+| faction = String
+| tier = Integer
+| side = String
+| slot = Integer
+| law_id = String
+}}
+
+<pre><nowiki>
+{{LawTreePositionDef
+| faction = String           <!-- human, demon, dungeon, nature, undead, unfrozen -->
+| tier = Integer             <!-- 1-5 -->
+| side = String              <!-- faction | army -->
+| slot = Integer             <!-- 0-based position within (faction, tier, side) -->
+| law_id = String
+}}
+</nowiki></pre>
+
+== Field notes ==
+* '''Primary key is <code>(faction, tier, side, slot)</code>''', which is also unique on <code>law_id</code> (each law occupies exactly one tree position).
+* '''<code>side</code>''' is derived from the source <code>groups[]</code> index: <code>groups[0]</code> → <code>"faction"</code>, <code>groups[1]</code> → <code>"army"</code>. Mirrors the in-game screen labels (left = "Faction", right = "Army").
+* '''<code>slot</code>''' is the law's index within its <code>groups[k].laws[]</code> array (0-based). Laws per side range from 2 to 4.
+* '''<code>tier</code>''' is the row index of <code>fractionLawsLines[]</code> (1-based on emit, 0-based in source).
+
+== Related tables ==
+* [[Template:LawDef|Law]] — joined on <code>law_id = Law.id</code> (1:1 for placed laws).
+* [[Template:FactionLawTierDef|FactionLawTier]] — joined on <code>(faction, tier)</code> for the unlock threshold at this row.
+* [[Template:FactionDef|Faction]] — joined on <code>faction = Faction.id</code>.
+
+[[Category:Cargo Definitions]]
+</noinclude><includeonly>{{#cargo_store:_table=LawTreePosition
+| faction = {{{faction|}}}
+| tier = {{{tier|}}}
+| side = {{{side|}}}
+| slot = {{{slot|}}}
+| law_id = {{{law_id|}}}
+}}
+Created <code>LawTreePosition</code> entry: <code>{{{law_id|}}}</code></includeonly>

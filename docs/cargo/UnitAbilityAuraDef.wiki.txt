@@ -1,0 +1,52 @@
+<noinclude>
+Splinter for <code>ability_type = aura</code>. Range-1 unit-emanating effects. Always one per unit in the current corpus (singular <code>aura</code> field on the unit JSON). 6 instances in 2026-05-03: <code>angel</code>, <code>black_dragon_upg_alt</code>,
+<code>ent_upg</code>, <code>esquire_upg_alt</code>, <code>fairy_dragon</code>, <code>qilin_upg_alt</code>.
+
+Join to <code>UnitAbilityDef</code> on <code>ability_id</code>.
+
+== Schema ==
+{{#cargo_declare:_table=UnitAbilityAura
+| ability_id = String
+| target = String (allowed values=ally,allynoself,enemy)
+| power = Integer
+| radius = Integer
+| tag = String
+| affected_stat = String
+| affected_stat_amount = Float
+}}
+
+<pre><nowiki>
+{{UnitAbilityAuraDef
+| ability_id = String                         <!-- FK -> UnitAbility.ability_id -->
+| target = String (allowed values=ally,allynoself,enemy)
+| power = Integer
+| radius = Integer
+| tag = String                                <!-- 6 distinct in the current corpus -->
+| affected_stat = String
+| affected_stat_amount = Float
+}}
+</nowiki></pre>
+
+== Field notes ==
+* '''<code>target</code>''' controls who the aura affects. <code>allynoself</code> excludes the emitting unit (e.g. Esquire's aura buffs only neighbors).
+* '''<code>power</code>''' is currently always <code>1</code> in the corpus — the column is here as a future-proof. Higher values would mean multiple stacks of the aura's effect on each affected unit.
+* '''<code>radius</code>''' is currently always <code>1</code> (adjacent hexes). Aura units are short-range battlefield-shapers.
+* '''<code>tag</code>''' is the aura family name. Six distinct values in 2026-05-03: <code>angel_aura</code>, <code>black_dragon_aura</code>, <code>ent_aura</code>, <code>esquire_aura</code>, <code>fairy_dragon_aura</code>, <code>qilin_aura</code>.
+* '''<code>affected_stat</code> / <code>affected_stat_amount</code>''' describe the stat the aura applies. May be missing for auras whose effect is a non-stat payload (currently fairy_dragon's <code>alwaysMinDmg: true</code> pattern would hit this — encoded as a bool, not a numeric stat, so the bot omits the <code>_amount</code> slot).
+
+== Related tables ==
+* [[Template:UnitAbilityDef|UnitAbility]] — parent (1:1 on <code>ability_id</code>).
+
+== Notes ==
+
+[[Category:Cargo Definitions]]
+</noinclude><includeonly>{{#cargo_store:_table=UnitAbilityAura
+| ability_id = {{{ability_id|}}}
+| target = {{{target|}}}
+| power = {{{power|}}}
+| radius = {{{radius|}}}
+| tag = {{{tag|}}}
+| affected_stat = {{{affected_stat|}}}
+| affected_stat_amount = {{{affected_stat_amount|}}}
+}}
+Created <code>UnitAbilityAura</code> entry: <code>{{{ability_id|}}}</code></includeonly>

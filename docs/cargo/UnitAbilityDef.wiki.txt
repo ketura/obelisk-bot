@@ -1,0 +1,66 @@
+<noinclude>
+Parent table. One row per ability slot on every unit, regardless of type. Identity + L10n keys only — type-specific scalars live in splinter tables joined on <code>ability_id</code>.
+
+The wiki-side templates (<code><nowiki>{{ActiveAbility}}</nowiki></code>, <code><nowiki>{{PassiveAbility}}</nowiki></code>, …) each call <code>#cargo_store</code> against this table AND against their respective splinter table in a single template invocation. The bot picks the right template name per row based on <code>ability_type</code>.
+
+== Schema ==
+{{#cargo_declare:_table=UnitAbility
+| ability_id = String
+| unit_id = String
+| ability_type = String (allowed values=active,passive,conditional_passive,global_passive,aura,stat_passive,buff,debuff,selfbuff,additionbuff,copy_buff,curse,blood,other)
+| ordinal = Integer
+| variant = String (allowed values=base,advanced,upg,upg_alt)
+| name = String
+| description = Wikitext
+| name_sid = String
+| desc_sid = String
+}}
+
+<pre><nowiki>
+{{UnitAbilityDef
+| ability_id = String                         <!-- synthetic; primary join key -->
+| unit_id = String
+| ability_type = String (allowed values=active,passive,conditional_passive,global_passive,aura,stat_passive,buff,debuff,selfbuff,additionbuff,copy_buff,curse,blood,other)
+| ordinal = Integer
+| variant = String (allowed values=base,advanced,upg,upg_alt)
+| name = String
+| description = Wikitext
+| name_sid = String
+| desc_sid = String
+}}
+</nowiki></pre>
+
+== Field notes ==
+* '''<code>ability_id</code>''' is the universal join key. Format: <code><unit_id>[_<ability_type>]''<ordinal>[''<variant>]</code>, where <code>active</code> is omitted from the type slot and <code>base</code> is omitted from the variant slot. See <code>docs/cargo/README.md</code> for the full convention.
+* '''<code>ability_type</code>''' is the discriminator. The wiki layer uses it to decide which splinter to join against.
+** <code>active</code> — formerly named <code>ability</code> in older patches. Joined to <code>UnitAbilityActiveDef</code>.
+** <code>passive</code> / <code>conditional_passive</code> / <code>global_passive</code> / <code>aura</code> / <code>stat_passive</code> — each joined to its like-named splinter.
+** <code>buff</code> / <code>debuff</code> / <code>selfbuff</code> / <code>additionbuff</code> / <code>copy_buff</code> / <code>curse</code> / <code>blood</code> / <code>other</code> — discovered via SID family but have no unit-side splinter. Their payload lives in a future <code>Buff</code> table keyed on <code>name_sid</code>.
+* '''<code>variant</code>''' is <code>null</code> for the base/default form, <code>"advanced"</code> / <code>"upg"</code> / <code>"upg_alt"</code> for the appropriate variant SID family. Two rows with the same <code>(unit_id, ability_type, ordinal)</code> but different <code>variant</code> represent the same ability slot in different unit tiers.
+* '''<code>name</code> / <code>desc</code>''' are the English defaults. Translations are in <code>UnitAbilityTranslation</code>, joined on <code>ability_id</code>.
+
+== Related tables ==
+* [[Template:UnitAbilityActiveDef|UnitAbilityActive]] — splinter for <code>active</code>.
+* [[Template:UnitAbilityPassiveDef|UnitAbilityPassive]] — splinter for <code>passive</code>.
+* [[Template:UnitAbilityConditionalDef|UnitAbilityConditional]] — splinter for <code>conditional_passive</code>.
+* [[Template:UnitAbilityGlobalDef|UnitAbilityGlobal]] — splinter for <code>global_passive</code>.
+* [[Template:UnitAbilityAuraDef|UnitAbilityAura]] — splinter for <code>aura</code>.
+* [[Template:UnitAbilityStatPassiveDef|UnitAbilityStatPassive]] — splinter for <code>stat_passive</code>.
+* [[UnitAbilityTranslation]] — i18n companion (1:1).
+* [[Template:UnitDef|Unit]] — parent on <code>unit_id = id</code> (N:1).
+
+== Notes ==
+
+[[Category:Cargo Definitions]]
+</noinclude><includeonly>{{#cargo_store:_table=UnitAbility
+| ability_id = {{{ability_id|}}}
+| unit_id = {{{unit_id|}}}
+| ability_type = {{{ability_type|}}}
+| ordinal = {{{ordinal|}}}
+| variant = {{{variant|}}}
+| name = {{{name|}}}
+| description = {{{description|}}}
+| name_sid = {{{name_sid|}}}
+| desc_sid = {{{desc_sid|}}}
+}}
+Created <code>UnitAbility</code> entry: <code>{{{ability_id|}}}</code></includeonly>

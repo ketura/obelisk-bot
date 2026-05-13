@@ -1,0 +1,78 @@
+<noinclude>
+One row per faction law (~198 production laws + 34 test laws across the 2026-05-05 corpus). Each law is a passive faction-wide effect that the player can enact during the Astrology phase by spending law points; effects scale through 1-3 mastery levels, each level costing a separate budget of points.
+
+A law carries identity (name, desc, icon), faction membership, balance-relevant tier placement, a count of how many levels it has, and the source file it came from. Per-level data (cost, description, bonuses) lives on the [[Template:LawLevelDef|LawLevel]] side table. Display-tree placement (which column / slot it sits in on the in-game law screen) lives on [[Template:LawTreePositionDef|LawTreePosition]].
+
+== Page layout ==
+<code>Data:Law/<id></code> carries:
+
+# <code><nowiki>{{LawDef | id=… | faction=… | tier=… | name=… | desc_sid=… | icon=… | …}}</nowiki></code>
+# <code><nowiki>{{TranslationDef | type=law | target_id=<id> | …}}</nowiki></code> — name only (one shared name across all levels)
+# N × <code><nowiki>{{LawLevelDef | law_id=<id> | level=N | cost=… | description=… }}</nowiki></code>
+# N × <code><nowiki>{{LawLevelTranslationDef | law_id=<id> | level=N | <lang>_desc=… }}</nowiki></code>
+# M × <code><nowiki>{{BonusDef | parent_type=law_level | parent_id=<id>_L<level> | ordinal=… | type=… | …}}</nowiki></code> — one per <code>bonuses[]</code> entry, summed across all levels
+
+== Schema ==
+{{#cargo_declare:_table=Law
+| id = String
+| faction = String
+| ordinal = Integer
+| tier = Integer
+| name = String
+| name_sid = String
+| desc_sid = String
+| icon = String
+| max_level = Integer
+| test = Boolean
+| source_path = String
+}}
+
+<pre><nowiki>
+{{LawDef
+| id = String
+| faction = String              <!-- human, demon, dungeon, nature, undead, unfrozen; null for test laws -->
+| ordinal = Integer             <!-- the trailing N parsed from id -->
+| tier = Integer                <!-- 1-5; the balance-relevant tree row; null for test laws -->
+| name = String
+| name_sid = String
+| desc_sid = String             <!-- shared SID; placeholders substitute per level -->
+| icon = String
+| max_level = Integer           <!-- 1-3, == count(LawLevel rows) -->
+| test = Boolean                <!-- true for fractions_laws_test*.json entries -->
+| source_path = String
+}}
+</nowiki></pre>
+
+== Field notes ==
+* '''<code>id</code>''' is the source JSON id (e.g. <code>fraction_law_human_1</code>, <code>test_fraction_law_1</code>, <code>test_new_fraction_law_1</code>).
+* '''<code>faction</code>''' is the in-game faction the law belongs to. NULL for test/dev laws that have no faction tree placement.
+* '''<code>tier</code>''' (1-5) is the row of the law tree where this law lives in its faction. Stored on <code>LawDef</code> because moving a law from tier 2 → tier 3 is a balance change, not a layout change. NULL for test laws.
+* '''<code>name_sid</code> / <code>desc_sid</code>''' point at the L10n entries (e.g. <code>fraction_law_human_1_name</code>, <code>fraction_law_human_1_desc</code>).
+* '''<code>name</code>''' carries the resolved English name. Names are shared across all levels of a law.
+* '''<code>desc_sid</code>''' is ''also'' shared across all levels — the same template ("Produces {0} Gold daily.") gets substituted with different per-level numbers. Per-level resolved English text lives on the <code>LawLevel.description</code> column. Foreign-language per-level descriptions live on <code>LawLevelTranslationDef</code>.
+* '''<code>max_level</code>''' equals the length of the source <code>parametersPerLevel</code> array.
+* '''<code>test</code>''' is true for laws sourced from <code>fractions_laws_test.json</code> or <code>fractions_laws_test_new.json</code>. Most queries should <code>WHERE test = false</code>.
+
+== Related tables ==
+* [[Template:LawLevelDef|LawLevel]] — joined on <code>id = law_id</code> (1:N where N=1..3).
+* [[Template:LawTreePositionDef|LawTreePosition]] — joined on <code>id = law_id</code> (1:1 for production laws, 0:1 for test laws).
+* [[Template:FactionLawTierDef|FactionLawTier]] — sibling table; one row per (faction, tier) carrying <code>count_to_unlock</code> law-points threshold.
+* [[Template:BonusDef|<code>BonusDef</code>]] — joined on <code>parent_type='law_level' AND parent_id LIKE id || '_L%'</code>.
+* [[Template:TranslationDef|<code>TranslationDef</code>]] — one row per law with <code>type=law</code>, <code>target_id=id</code>, carrying the name in 16 languages.
+* [[Template:FactionDef|Faction]] — joined on <code>faction = Faction.id</code>.
+
+[[Category:Cargo Definitions]]
+</noinclude><includeonly>{{#cargo_store:_table=Law
+| id = {{{id|}}}
+| faction = {{{faction|}}}
+| ordinal = {{{ordinal|}}}
+| tier = {{{tier|}}}
+| name = {{{name|}}}
+| name_sid = {{{name_sid|}}}
+| desc_sid = {{{desc_sid|}}}
+| icon = {{{icon|}}}
+| max_level = {{{max_level|}}}
+| test = {{{test|}}}
+| source_path = {{{source_path|}}}
+}}
+Created <code>Law</code> entry: <code>{{{id|}}}</code></includeonly>

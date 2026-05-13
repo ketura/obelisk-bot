@@ -25,6 +25,32 @@ edit_summary = obelisk-bot: patch sync
 requests_per_second = 0.5
 maxlag = 5
 
+# --- Cloudflare bypass (only needed if the wiki sits behind CF) ------------
+# If the wiki is fronted by Cloudflare with managed challenges, the bot's
+# first API call (siteinfo) gets intercepted by CF's JS challenge — which
+# the bot can't solve. Workaround: pass the challenge once in a browser,
+# copy the resulting cookies here, and the bot will reuse them.
+#
+# Steps:
+#   1. Open the wiki in your browser. Wait for any CF challenge page to
+#      resolve (usually instant — you'll see the article).
+#   2. F12 -> Application -> Storage -> Cookies -> https://wiki.hoodedhorse.com.
+#   3. Find `cf_clearance` and copy its Value.
+#   4. (Optional but recommended:) also copy `__cf_bm` and any
+#      MediaWiki session cookies (`<wikiprefix>_session`,
+#      `<wikiprefix>UserName`, `<wikiprefix>UserID`).
+#   5. In the same devtools, look at Network -> any request -> Request
+#      Headers and copy the entire `User-Agent` string verbatim. Set it
+#      as `user_agent` above. cf_clearance is bound to the UA that
+#      issued it; if they don't match, CF re-challenges.
+#   6. Paste the cookies below as `name=value; name=value; ...`.
+#
+# Cookies expire (cf_clearance lives ~30 minutes to a few hours). If the
+# bot starts failing mid-run with 403s, refresh the browser tab and
+# repeat steps 3-6.
+#
+# cookies = cf_clearance=xxxxx; __cf_bm=yyyyy; my_wiki_session=zzzzz
+
 # --- Local test wiki example -----------------------------------------------
 # Swap the live values above for these to point at a local MediaWiki:
 #

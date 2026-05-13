@@ -38,6 +38,58 @@ The truncation appears to happen on writes that round-trip through
 the mount, not just reads. Treat the mount as eventually-consistent
 with delays of unknown magnitude.
 
+**Update from later sessions** — additional patterns observed beyond
+the original entry:
+
+- **Null-byte tails, not just truncation.** Some "truncated" writes
+  actually replace the lost tail with literal ``\x00`` bytes. A naive
+  ``text.rstrip()`` won't catch them (rstrip recognizes whitespace
+  characters, not nulls), and Python text-mode reads with
+  ``errors="replace"`` silently turn the nulls into U+FFFD which
+  survive whitespace stripping. The fix is byte-mode: read with
+  ``Path.read_bytes()``, strip ``b"\x00 \t\n\r"`` from the right,
+  rewrite with ``Path.write_bytes()``. Tell-tale that null-bytes are
+  the cause: ``ast.parse()`` raises ``ValueError: source code string
+  cannot contain null bytes``, or ``grep`` starts reporting the file
+  as binary.
+
+- **The Edit tool isn't a guaranteed workaround.** The original entry
+  recommends ``Edit`` over ``cat >> file``, which is generally true,
+  but ``Edit`` calls can return success and still leave the on-disk
+  file truncated for the same handful of files repeatedly. Some files
+  (during the cargo template work: ``ArtifactDef.wiki.txt``,
+  ``SpellRankDef.wiki.txt``, ``shared/BonusDef.wiki.txt``) consistently
+  re-truncated themselves across multiple ``Write`` / ``Edit`` cycles
+  even after a clean rewrite. Common factors among the persistent
+  victims: file size in the 3-5 KB range, contents include
+  ``<noinclude>``/``<includeonly>`` template syntax, frequent edits in
+  short succession.
+
+- **Working fallback: direct binary write through bash Python.** When
+  ``Edit`` / ``Write`` persistently truncate a specific file, drop to
+  bash and write via Python's binary file API:
+
+  ```bash
+  python3 << 'PYEOF'
+  content = b"...full file body as bytes..."
+  with open("path/to/file", "wb") as f:
+      f.write(content)
+  PYEOF
+  ```
+
+  This bypasses the editor-tool persistence layer and writes through
+  to the Windows-side file in one shot. After the write, verify with
+  ``Path.read_bytes()`` that the on-disk size matches what was
+  written.
+
+- **Cross-check via Read.** Whenever a bash check (``wc -l``,
+  ``grep -c``, ``ast.parse``) reports something suspicious, validate
+  against the ``Read`` tool before reacting. Roughly 80% of the
+  "issues" reported by bash-side checks during the cargo work were
+  bash-mount staleness, not actual file damage. The fingerprint of a
+  genuine issue is: ``Read`` shows the same problem the bash check
+  does.
+
 ## Architectural patterns
 
 ### L10n SID family naming as schema discovery

@@ -1,0 +1,50 @@
+<noinclude>
+One unlock tier of an <code>ItemSetDef</code>. The hero unlocks the tier's bonuses when they have `<code>required_amount</code>` artifacts from the parent set equipped. Sets have 1-3 tiers each (~37 tiers across the 24 sets in the 2026-05-03 corpus).
+
+The bot emits these inline on the parent <code>Data:ItemSet/<id></code> page. There are no individual <code>Data:ItemSetTier/…</code> pages.
+
+== Schema ==
+{{#cargo_declare:_table=ItemSetTier
+| id = String
+| set_id = String
+| ordinal = Integer
+| required_amount = Integer
+| description_sid = String
+| description = Wikitext
+}}
+
+<pre><nowiki>
+{{ItemSetTierDef
+| id = String                        <!-- synthesized: <set_id>_tier_<ordinal> -->
+| set_id = String                    <!-- joins ItemSet.id -->
+| ordinal = Integer                  <!-- 0-based position in source bonuses[] -->
+| required_amount = Integer          <!-- pieces equipped to unlock -->
+
+| description_sid = String
+| description = Wikitext             <!-- resolved English -->
+}}
+</nowiki></pre>
+
+== Field notes ==
+* '''Primary key is <code>id</code>'''. The synthesized form <code><set_id>''tier''<ordinal></code> lets <code>Bonus.parent_id</code> join cleanly via <code>parent_type='item_set_tier'</code>.
+* '''<code>set_id</code>''' is the parent — duplicated here as a column so filtering by set doesn't require parsing the composite id.
+* '''<code>required_amount</code>''' values seen in the 2026-05-03 corpus: 2 (×17 tiers), 3 (×11), 4 (×7), 5 (×2), 6 (×2), 8 (×1).
+* '''<code>description</code>''' carries the resolved English text inline. Translations live on a <code><nowiki>{{TranslationDef | type=item_set_tier | target_id=<id>}}</nowiki></code> row (desc-only — tiers have no name).
+
+== Related tables ==
+* [[Template:ItemSetDef|ItemSet]] — joined on <code>set_id = id</code> (N:1).
+* [[Template:BonusDef|<code>BonusDef</code>]] — joined on <code>id = parent_id</code> (1:N) where <code>Bonus.parent_type = 'item_set_tier'</code>. Each tier has 1-6 bonus effects.
+* [[Template:TranslationDef|<code>TranslationDef</code>]] — one row per tier with <code>type=item_set_tier</code> and the description SIDs for the 15 non-English locales.
+
+== Notes ==
+
+[[Category:Cargo Definitions]]
+</noinclude><includeonly>{{#cargo_store:_table=ItemSetTier
+| id = {{{id|}}}
+| set_id = {{{set_id|}}}
+| ordinal = {{{ordinal|}}}
+| required_amount = {{{required_amount|}}}
+| description_sid = {{{description_sid|}}}
+| description = {{{description|}}}
+}}
+Created <code>ItemSetTier</code> entry: <code>{{{id|}}}</code></includeonly>

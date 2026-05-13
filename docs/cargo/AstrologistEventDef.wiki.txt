@@ -1,0 +1,67 @@
+<noinclude>
+One row per astrologist event — the periodically-rolled global modifiers the in-game Astrologer announces between weeks and months. 26 entries total in 2026-05-05: 15 weeks (e.g. "Week of Sorcery", "Week of Luck") + 11 months ("Month of the Locust", and so on).
+
+A single discriminator column <code>category</code> separates weeks from months — the source ships them in two parallel files (<code>DB/weeks/weeks.json</code> + <code>DB/weeks/months.json</code>) but the schema is identical, so we collapse to one table.
+
+== Page layout ==
+<code>Data:AstrologistEvent/<id></code> carries:
+
+# <code><nowiki>{{AstrologistEventDef | id=… | category=week|month | name=… | desc=… | …}}</nowiki></code>
+# <code><nowiki>{{TranslationDef | type=astrologist_event | target_id=<id> | …}}</nowiki></code> — name+desc in the 16 supported languages
+
+== Schema ==
+{{#cargo_declare:_table=AstrologistEvent
+| id = String
+| category = String
+| name = String
+| name_sid = String
+| description = Wikitext
+| desc_sid = String
+| icon = String
+| buff_sid = String
+| roll_chance = Integer
+| count_to_return = Integer
+| source_path = String
+}}
+
+<pre><nowiki>
+{{AstrologistEventDef
+| id = String
+| category = String              <!-- week | month -->
+| name = String                  <!-- resolved English -->
+| name_sid = String
+| description = Wikitext                <!-- resolved English -->
+| desc_sid = String              <!-- nullable -->
+| icon = String                  <!-- nullable -->
+| buff_sid = String              <!-- nullable; pointer into DB/buffs/ for the actual mechanical effect -->
+| roll_chance = Integer          <!-- nullable; weight in the random-pick table -->
+| count_to_return = Integer      <!-- global re-roll threshold (countToReturnWeek / countToReturnMonth) -->
+| source_path = String
+}}
+</nowiki></pre>
+
+== Field notes ==
+* '''<code>id</code>''' is the source JSON id (e.g. <code>astrologist_week_1</code>, <code>astrologist_month_3</code>).
+* '''<code>category</code>''' is the primary filter discriminator: <code>WHERE category='week'</code> to find every week event.
+* '''<code>buff_sid</code>''' points at an entry in <code>DB/buffs/</code> carrying the actual mechanical payload (the bonuses the buff applies while the event is active). Not flattened into this table — the player-facing description on the event already covers gameplay impact.
+* '''<code>roll_chance</code>''' is the relative weight in the engine's random-pick table when an astrology phase rolls. Per-event scalar; values across the 15-week table sum to roughly the same magnitude as the 11-month table since each is independently rolled.
+* '''<code>count_to_return</code>''' is the global re-roll cooldown — the same event can't repeat within this many ticks. Stored per row (rather than as a global config) so queries don't need a join. Currently 3 for weeks and (a different value, see <code>weeks_info.json</code>) for months.
+
+== Related tables ==
+* [[Template:TranslationDef|<code>TranslationDef</code>]] — one row per event with <code>type=astrologist_event</code>, <code>target_id=id</code>.
+
+[[Category:Cargo Definitions]]
+</noinclude><includeonly>{{#cargo_store:_table=AstrologistEvent
+| id = {{{id|}}}
+| category = {{{category|}}}
+| name = {{{name|}}}
+| name_sid = {{{name_sid|}}}
+| description = {{{description|}}}
+| desc_sid = {{{desc_sid|}}}
+| icon = {{{icon|}}}
+| buff_sid = {{{buff_sid|}}}
+| roll_chance = {{{roll_chance|}}}
+| count_to_return = {{{count_to_return|}}}
+| source_path = {{{source_path|}}}
+}}
+Created <code>AstrologistEvent</code> entry: <code>{{{id|}}}</code></includeonly>

@@ -23,7 +23,7 @@ from obelisk.resolve import PlaceholderResolver
 _ASTROLOGIST_EVENT_FIELD_ORDER: tuple[str, ...] = (
     "id", "category",
     "name", "name_sid",
-    "desc", "desc_sid",
+    "description", "desc_sid",
     "icon",
     "buff_sid",
     "roll_chance", "count_to_return",
@@ -52,7 +52,7 @@ def emit_astrologist_event_page(
         "category": event.category,
         "name": en_name,
         "name_sid": event.name_sid,
-        "desc": en_desc,
+        "description": en_desc,
         "desc_sid": event.desc_sid,
         "icon": event.icon,
         "buff_sid": event.buff_sid,

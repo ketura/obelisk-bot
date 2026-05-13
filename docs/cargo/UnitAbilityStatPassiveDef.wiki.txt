@@ -1,0 +1,42 @@
+<noinclude>
+Splinter for <code>ability_type = stat_passive</code>. Synthesized rows: the bot spots stat-mechanic JSON blocks (e.g. <code>{"attackPen": 0.3}</code>) on a unit's
+<code>data.stats</code>, recognizes the mechanic key from a registry, and creates a
+UnitAbility row with the shared name/desc SIDs that other units with the same stat passive use.
+
+Examples: Godslayer's <code>outDamageIfLevelAbove: 0.5</code> → "Apex Predator". Multiple units with <code>attackPen</code> → all share the "Unyielding" name + a common <code>base_passive_<mechanic>''<rank>''*</code> SID family.
+
+Join to <code>UnitAbilityDef</code> on <code>ability_id</code>.
+
+== Schema ==
+{{#cargo_declare:_table=UnitAbilityStatPassive
+| ability_id = String
+| affected_stat = String
+| affected_stat_amount = Float
+}}
+
+<pre><nowiki>
+{{UnitAbilityStatPassiveDef
+| ability_id = String                         <!-- FK -> UnitAbility.ability_id -->
+| affected_stat = String                      <!-- mechanic key, e.g. "attackPen", "armorPen" -->
+| affected_stat_amount = Float
+}}
+</nowiki></pre>
+
+== Field notes ==
+* '''<code>affected_stat</code>''' holds the source mechanic key from the unit JSON's <code>data.stats</code> block. It's the ''raw'' key (e.g. <code>outDamageIfLevelAbove</code>, not the human-readable "Apex Predator"). The display name lives on the parent <code>UnitAbilityDef</code> row's <code>name</code> field, resolved from the shared <code>base_passive_*</code> SID.
+* '''<code>affected_stat_amount</code>''' is the concrete value, e.g. <code>0.5</code> for a 50% bonus. Wiki templates that render stat passives format it according to the mechanic — <code>attackPen</code> displays as a percent, <code>outDamageIfLevelAbove</code> as an absolute multiplier, etc.
+* '''The mapping mechanic-key → display-name + SID''' is in <code>obelisk.emit.unit</code>'s <code>STAT_PASSIVE_REGISTRY</code>. New mechanic keys surface in the audit report when the bot can't classify them.
+'' '''No L10n fields here:''' the parent UnitAbility row carries <code>name_sid</code> and <code>desc_sid</code> pointing at the shared <code>base_passive_''</code> SID family. The translation row picks those up the same way as any other ability.
+
+== Related tables ==
+* [[Template:UnitAbilityDef|UnitAbility]] — parent (1:1 on <code>ability_id</code>).
+
+== Notes ==
+
+[[Category:Cargo Definitions]]
+</noinclude><includeonly>{{#cargo_store:_table=UnitAbilityStatPassive
+| ability_id = {{{ability_id|}}}
+| affected_stat = {{{affected_stat|}}}
+| affected_stat_amount = {{{affected_stat_amount|}}}
+}}
+Created <code>UnitAbilityStatPassive</code> entry: <code>{{{ability_id|}}}</code></includeonly>

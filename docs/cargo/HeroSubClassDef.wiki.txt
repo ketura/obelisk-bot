@@ -1,0 +1,102 @@
+<noinclude>
+A named prestige class — Swashbuckler, Paragon, Grand Inquisitor, Ascendant, etc. — that a hero unlocks by hitting **5 specific skill thresholds**. 24 rows total: 4 per faction × 6 factions, split 2 might + 2 magic per faction.
+
+The bot emits each sub-class at <code>Data:HeroSubClass/<id></code> carrying:
+
+# <code><nowiki>{{HeroSubClassDef | id=… | name=… | desc=… | activation_skill_1_sid=… | …}}</nowiki></code> — main row with the 5 activation thresholds inline.
+# <code><nowiki>{{TranslationDef | type=hero_sub_class | target_id=<id> | …}}</nowiki></code> — name/description translations (per D-026).
+# N × <code><nowiki>{{HeroSubClassBonus | sub_class_id=<id> | ordinal=N | …}}</nowiki></code> — the unlocked passive bonuses (~2 per sub-class, 46 total).
+
+== Schema ==
+{{#cargo_declare:_table=HeroSubClass
+| id = String
+| name = String
+| description = Wikitext
+| name_sid = String
+| desc_sid = String
+| icon = String
+| faction = String (allowed values=human,undead,dungeon,nature,demon,unfrozen)
+| class_type = String (allowed values=might,magic)
+| activation_skill_1_sid = String
+| activation_skill_1_level = Integer
+| activation_skill_2_sid = String
+| activation_skill_2_level = Integer
+| activation_skill_3_sid = String
+| activation_skill_3_level = Integer
+| activation_skill_4_sid = String
+| activation_skill_4_level = Integer
+| activation_skill_5_sid = String
+| activation_skill_5_level = Integer
+| source_path = String
+}}
+
+<pre><nowiki>
+{{HeroSubClassDef
+| id = String                            <!-- sub_class_<faction>_<might|magic>_<1|2> -->
+| name = String
+| description = Wikitext
+| name_sid = String
+| desc_sid = String
+| icon = String
+
+| faction = String (allowed values=human,undead,dungeon,nature,demon,unfrozen)
+| class_type = String (allowed values=might,magic)
+
+<!-- 5 activation thresholds, flattened. Every sub-class has exactly 5
+     in the 2026-05-03 corpus. Each pair references a future Skill SID
+     and the rank the hero must reach. subSkillSids (always empty in
+     2026-05-03) is dropped per D-029. -->
+| activation_skill_1_sid = String
+| activation_skill_1_level = Integer
+| activation_skill_2_sid = String
+| activation_skill_2_level = Integer
+| activation_skill_3_sid = String
+| activation_skill_3_level = Integer
+| activation_skill_4_sid = String
+| activation_skill_4_level = Integer
+| activation_skill_5_sid = String
+| activation_skill_5_level = Integer
+
+| source_path = String
+}}
+</nowiki></pre>
+
+== Field notes ==
+* '''<code>id</code>''' matches the L10n SID prefix (e.g. <code>sub_class_human_might_1</code> → "Swashbuckler").
+* '''<code>name_sid</code> / <code>desc_sid</code>''' point at <code><id>_name</code> / <code><id>_desc</code>. Full 16-language coverage.
+* '''<code>name</code> / <code>desc</code>''' carry the resolved English text inline. Translations live on the <code><nowiki>{{TranslationDef | type=hero_sub_class}}</nowiki></code> row.
+* '''Activation conditions are joined by AND''' — the hero must hit all 5 skill thresholds to unlock the sub-class.
+* '''Per-faction-class matchup:''' every (faction × class_type) cell has exactly 2 sub-classes. Looking up "what sub-classes are available to a magic Demon hero?" → <code>WHERE faction='demon' AND class_type='magic'</code> → 2 rows (Progenitor, Lord of Chaos).
+
+== Related tables ==
+* [[Template:HeroDef|Hero]] — joins via <code>Hero.faction = HeroSubClass.faction AND Hero.class_type = HeroSubClass.class_type</code>. Each hero qualifies for the 2 sub-classes in their faction × class_type cell.
+* [[Template:HeroClassDef|HeroClass]] — same join; HeroSubClass is the prestige progression on top of the broader HeroClass.
+* [[HeroSubClassBonus]] — joined on <code>id = sub_class_id</code> (1:N).
+'' <code>SkillDef</code> — ''(future table; joined on activation_skill_<N>_sid)*.
+* [[Template:TranslationDef|<code>TranslationDef</code>]] — one row per sub-class with <code>type=hero_sub_class</code>.
+
+== Notes ==
+
+[[Category:Cargo Definitions]]
+</noinclude><includeonly>{{#cargo_store:_table=HeroSubClass
+| id = {{{id|}}}
+| name = {{{name|}}}
+| description = {{{description|}}}
+| name_sid = {{{name_sid|}}}
+| desc_sid = {{{desc_sid|}}}
+| icon = {{{icon|}}}
+| faction = {{{faction|}}}
+| class_type = {{{class_type|}}}
+| activation_skill_1_sid = {{{activation_skill_1_sid|}}}
+| activation_skill_1_level = {{{activation_skill_1_level|}}}
+| activation_skill_2_sid = {{{activation_skill_2_sid|}}}
+| activation_skill_2_level = {{{activation_skill_2_level|}}}
+| activation_skill_3_sid = {{{activation_skill_3_sid|}}}
+| activation_skill_3_level = {{{activation_skill_3_level|}}}
+| activation_skill_4_sid = {{{activation_skill_4_sid|}}}
+| activation_skill_4_level = {{{activation_skill_4_level|}}}
+| activation_skill_5_sid = {{{activation_skill_5_sid|}}}
+| activation_skill_5_level = {{{activation_skill_5_level|}}}
+| source_path = {{{source_path|}}}
+}}
+Created <code>HeroSubClass</code> entry: <code>{{{id|}}}</code></includeonly>

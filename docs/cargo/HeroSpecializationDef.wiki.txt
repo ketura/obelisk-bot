@@ -1,0 +1,60 @@
+<noinclude>
+One row per hero specialization (126 in the 2026-05-03 corpus: 108 faction + 9 campaign + 5 tutorial + 4 test). Each spec is the unique passive that distinguishes one hero mechanically — every Hero record carries <code>specialization_id</code> pointing at one of these.
+
+The specialization carries identity (name, desc, icon) plus a list of structured <code>bonuses[]</code> effects that compose the spec's mechanical impact. Bonuses are emitted as inline
+<code><nowiki>{{HeroSpecializationBonus}}</nowiki></code> rows on the same wiki page.
+
+== Page layout ==
+<code>Data:HeroSpecialization/<id></code> carries:
+
+# <code><nowiki>{{HeroSpecializationDef | id=… | name=… | desc=… | icon=… | …}}</nowiki></code>
+# <code><nowiki>{{TranslationDef | type=hero_specialization | target_id=<id> | …}}</nowiki></code>
+# N × <code><nowiki>{{HeroSpecializationBonus | spec_id=<id> | ordinal=N | …}}</nowiki></code> (1367 total bonus rows across all 126 specs)
+
+== Schema ==
+{{#cargo_declare:_table=HeroSpecialization
+| id = String
+| name = String
+| description = Wikitext
+| name_sid = String
+| desc_sid = String
+| icon = String
+| source_path = String
+}}
+
+<pre><nowiki>
+{{HeroSpecializationDef
+| id = String
+| name = String
+| description = Wikitext
+| name_sid = String
+| desc_sid = String
+| icon = String
+| source_path = String
+}}
+</nowiki></pre>
+
+== Field notes ==
+* '''<code>id</code>''' is the source JSON id (e.g. <code>human_hero_1_specialization</code>, <code>campaign_hero_4_specialization</code>). The <code>_specialization</code> suffix is preserved.
+* '''<code>name_sid</code> / <code>desc_sid</code>''' point at the L10n entries (e.g. <code>human_hero_1_spec_name</code> / <code>human_hero_1_spec_description</code>). Description text is heavy with <code>{0}</code>/<code>{1}</code> placeholders for stat values; the resolver substitutes via the standard pipeline before storing.
+* '''<code>name</code> / <code>desc</code>''' carry the resolved English text inline. Translations live on the <code><nowiki>{{TranslationDef | type=hero_specialization}}</nowiki></code> row.
+* '''No <code>hero_id</code> back-reference.''' The Hero → HeroSpecialization direction is sufficient (forward join via <code>Hero.specialization_id = HeroSpecialization.id</code>). Reverse queries — "which hero has this spec" — work via the same join. Per D-028.
+
+== Related tables ==
+* [[Template:HeroDef|Hero]] — joined on <code>id = Hero.specialization_id</code> (1:1 in practice; the schema permits N:1 in case a future patch shares specs across heroes).
+* [[HeroSpecializationBonus]] — joined on <code>id = spec_id</code> (1:N).
+* [[Template:TranslationDef|<code>TranslationDef</code>]] — one row per spec with <code>type=hero_specialization</code>, <code>target_id=id</code>.
+
+== Notes ==
+
+[[Category:Cargo Definitions]]
+</noinclude><includeonly>{{#cargo_store:_table=HeroSpecialization
+| id = {{{id|}}}
+| name = {{{name|}}}
+| description = {{{description|}}}
+| name_sid = {{{name_sid|}}}
+| desc_sid = {{{desc_sid|}}}
+| icon = {{{icon|}}}
+| source_path = {{{source_path|}}}
+}}
+Created <code>HeroSpecialization</code> entry: <code>{{{id|}}}</code></includeonly>

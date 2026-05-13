@@ -1,0 +1,80 @@
+<noinclude>
+One row per faction (6 rows total: <code>human</code>, <code>undead</code>, <code>dungeon</code>,
+<code>nature</code>, <code>demon</code>, <code>unfrozen</code>). Carries the structural data the
+in-game faction record holds — display name, description, biome, signature resource, asset references — plus the SIDs the
+<code>FactionTranslation</code> sibling joins on.
+
+The bot emits one <code><nowiki>{{FactionDef | …}}</nowiki></code> template invocation at the top of each <code>Data:Faction/<id></code> page, immediately followed by the
+<code><nowiki>{{FactionTranslation | …}}</nowiki></code> row for the 15 non-English locales.
+City-name pool entries are ''not'' on this page — they emit separately as <code>EntryDef</code> rows of <code>type=FactionCityName</code> (one row per city, see [[Template:EntryDef|<code>shared/Entry.md</code>]] and D-025).
+
+Faction laws (the <code>fractionLawsLines</code> skill-tree structure in source JSON) are deferred — that ships when the dedicated FactionLaw work lands. Until then the law tree shape is not surfaced on the wiki.
+
+== Schema ==
+{{#cargo_declare:_table=Faction
+| id = String (allowed values=human,undead,dungeon,nature,demon,unfrozen)
+| name = String
+| description = Wikitext
+| icon = String
+| icon_faction_laws = String
+| biome = String
+| resource = String
+| name_sid = String
+| desc_sid = String
+| source_path = String
+}}
+
+<pre><nowiki>
+{{FactionDef
+| id = String (allowed values=human,undead,dungeon,nature,demon,unfrozen)
+| name = String
+| description = Wikitext
+
+| icon = String
+| icon_faction_laws = String
+
+| biome = String
+| resource = String
+
+| name_sid = String
+| desc_sid = String
+
+| source_path = String
+}}
+</nowiki></pre>
+
+== Field notes ==
+* '''<code>id</code>''' is the primary key. Six fixed values; <code>neutral</code> is ''not'' a faction here even though <code>FactionDef</code> enum includes it for unit classification — there's no <code>7_neutral.json</code> source file.
+* '''<code>name</code> / <code>desc</code>''' carry the resolved English defaults inline. Translations live on <code>FactionTranslation</code> keyed by <code>name_sid</code> / <code>desc_sid</code>. Per HoMM tradition the faction's display name is the town-style name: "Temple", "Necropolis", "Dungeon", "Grove", "Hive", "Schism".
+* '''<code>icon</code>''' is the asset filename for the standard faction crest (e.g. <code>fraction_human</code>); the source JSON's misspelling is preserved here since it's an asset path, not a normalized concept.
+* '''<code>icon_faction_laws</code>''' is a separate icon used on the faction-laws panel (e.g. <code>Scroll_Faction_Human</code>). Renamed from JSON's <code>iconFractionLaws</code>.
+* '''<code>biome</code>''' is the faction's signature terrain (<code>Grass</code>, <code>Deathland</code>, <code>Dirt</code>, <code>Autumn</code>, <code>Lava</code>, <code>Snow</code>). One per faction, all distinct in the 2026-05-03 corpus.
+* '''<code>resource</code>''' is the faction's signature resource (<code>gemstones</code>, <code>mercury</code>, <code>crystals</code>). Renamed from JSON's <code>resourceName</code>. Distribution: gemstones (human, dungeon), mercury (undead, unfrozen), crystals (nature, demon).
+* '''<code>source_path</code>''' is the JSON path relative to <code>Core/</code>, useful for audit / diff traceability.
+
+== Dropped from source ==
+The source JSON's <code>narrativeDesc</code> field references SIDs of the form
+<code><id>_narrative_desc</code> that exist in ''no'' language file in the
+2026-05-03 corpus. Dead pointer; we drop the field entirely. If a future patch populates the SIDs, we'll add the column back.
+
+== Related tables ==
+* [[FactionTranslation]] — joined on <code>id = faction_id</code> (1:1) for the 15 non-English locales.
+* [[Template:EntryDef|<code>EntryDef</code>]] where <code>type='FactionCityName'</code> — joined via <code>subtype LIKE '<faction>_%'</code> to surface this faction's randomization-pool city names.
+* [[Template:UnitDef|Unit]] — joined via <code>Unit.faction = Faction.id</code> (1:N).
+
+== Notes ==
+
+[[Category:Cargo Definitions]]
+</noinclude><includeonly>{{#cargo_store:_table=Faction
+| id = {{{id|}}}
+| name = {{{name|}}}
+| description = {{{description|}}}
+| icon = {{{icon|}}}
+| icon_faction_laws = {{{icon_faction_laws|}}}
+| biome = {{{biome|}}}
+| resource = {{{resource|}}}
+| name_sid = {{{name_sid|}}}
+| desc_sid = {{{desc_sid|}}}
+| source_path = {{{source_path|}}}
+}}
+Created <code>Faction</code> entry: <code>{{{id|}}}</code></includeonly>

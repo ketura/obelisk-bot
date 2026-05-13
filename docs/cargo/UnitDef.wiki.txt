@@ -1,0 +1,179 @@
+<noinclude>
+One row per extracted creature. Combat stats, resource costs, faction metadata, and classification flags. The bot emits one <code><nowiki>{{UnitDef | …}}</nowiki></code> template invocation per unit at the top of <code>Data:Unit/<id></code>. The template's job on the wiki side is to call <code>#cargo_store</code> with these parameters.
+
+== Schema ==
+{{#cargo_declare:_table=Unit
+| id = String
+| unused = Boolean
+| faction = String (allowed values=human,undead,dungeon,nature,demon,unfrozen,neutral)
+| tier = Integer
+| source_path = String
+| name = String
+| description = Wikitext
+| name_sid = String
+| desc_sid = String
+| base_sid = String
+| upgrade_sid = String
+| hp = Integer
+| offence = Integer
+| defence = Integer
+| damage_min = Integer
+| damage_max = Integer
+| initiative = Integer
+| speed = Integer
+| luck = Integer
+| morale = Integer
+| energy_per_cast = Integer
+| energy_per_round = Integer
+| energy_per_take_damage = Integer
+| action_points = Integer
+| num_counters = Integer
+| morale_min = Integer
+| morale_max = Integer
+| luck_min = Integer
+| luck_max = Integer
+| move_type = String (allowed values=ground,fly,teleport,jump)
+| creature_type = String (allowed values=living,undead,demon,magic_creature,embodiment,dragon,construct)
+| immunities = List (,) of String
+| disablers = List (,) of String
+| shared_abilities = List (,) of String
+| native_biome = String
+| ai_archetype = String
+| tags = List (,) of String
+| leave_corpse = Boolean
+| gold_cost = Integer
+| wood_cost = Integer
+| ore_cost = Integer
+| mercury_cost = Integer
+| dust_cost = Integer
+| crystal_cost = Integer
+| gemstone_cost = Integer
+| squad_value = Integer
+| exp_bonus = Integer
+}}
+
+<pre><nowiki>
+{{UnitDef
+| id = String
+| unused = Boolean
+| faction = String (allowed values=human,undead,dungeon,nature,demon,unfrozen,neutral)
+| tier = Integer
+| source_path = String
+
+<!-- Localization references -->
+| name = String
+| description = Wikitext
+| name_sid = String
+| desc_sid = String
+| base_sid = String                          <!-- this unit's base form, if it's an upgrade -->
+| upgrade_sid = String                        <!-- the unit's upgrade target, if it has one -->
+
+<!-- Stats block (mirrors UnitStats) -->
+| hp = Integer
+| offence = Integer
+| defence = Integer
+| damage_min = Integer
+| damage_max = Integer
+| initiative = Integer
+| speed = Integer
+| luck = Integer
+| morale = Integer
+| energy_per_cast = Integer
+| energy_per_round = Integer
+| energy_per_take_damage = Integer
+| action_points = Integer
+| num_counters = Integer
+| morale_min = Integer
+| morale_max = Integer
+| luck_min = Integer
+| luck_max = Integer
+| move_type = String (allowed values=ground,fly,teleport,jump)
+
+<!-- Classification -->
+| creature_type = String (allowed values=living,undead,demon,magic_creature,embodiment,dragon,construct)
+| immunities = List (,) of String
+| disablers = List (,) of String
+| shared_abilities = List (,) of String      <!-- name SIDs of base_*/<faction>_* passives -->
+| native_biome = String
+| ai_archetype = String
+| tags = List (,) of String
+| leave_corpse = Boolean
+
+<!-- Resource costs (sparse — only the resources this unit needs are populated) -->
+| gold_cost = Integer
+| wood_cost = Integer
+| ore_cost = Integer
+| mercury_cost = Integer
+| dust_cost = Integer
+| crystal_cost = Integer
+| gemstone_cost = Integer
+
+<!-- Misc -->
+| squad_value = Integer                       <!-- AI-side squad-power scoring -->
+| exp_bonus = Integer
+}}
+</nowiki></pre>
+
+== Field notes ==
+* '''<code>unused</code>''' is sparse-emitted: only present (as <code>yes</code>) for the small set of deprecated units (units whose <code>name_sid</code> has no English entry). Filter most queries with <code>WHERE unused != "yes"</code>.
+* '''<code>base_sid</code> / <code>upgrade_sid</code>''' form the variant chain: <code>crossbowman</code> → <code>crossbowman_upg</code> → <code>crossbowman_upg_alt</code>. Each tier gets its own row.
+* '''<code>shared_abilities</code>''' lists name SIDs of the base/faction passives this unit has (e.g. <code>base_passive_melee_attack_name</code>). The actual passive text lives in shared tables (Phase 2). The bot ships these as references so the wiki display layer can render them by lookup instead of duplicating text on every unit page.
+* '''Resource cost columns are sparse.''' Most units have only <code>gold_cost</code>; tier-7s cost gold + a special resource. The <code>dust_cost</code> column reflects Olden Era's "dust" resource (analogous to mercury in HoMM3).
+* '''<code>creature_type</code> is derived''' from data-immunities tagged <code><class>_immunities</code> — <code>living_immunities</code> → <code>living</code>, etc. The unit's actual immunity tags live in <code>immunities</code>.
+* '''<code>name_sid</code> / <code>desc_sid</code>''' are the join keys to <code>UnitTranslation</code>.
+
+== Related tables ==
+* [[UnitTranslation]] — joined on <code>name_sid</code> (1:1).
+* [[Template:UnitAbilityDef|UnitAbility]] and its splinters — joined on <code>unit_id = id</code> (1:N).
+
+[[Category:Cargo Definitions]]
+</noinclude><includeonly>{{#cargo_store:_table=Unit
+| id = {{{id|}}}
+| unused = {{{unused|}}}
+| faction = {{{faction|}}}
+| tier = {{{tier|}}}
+| source_path = {{{source_path|}}}
+| name = {{{name|}}}
+| description = {{{description|}}}
+| name_sid = {{{name_sid|}}}
+| desc_sid = {{{desc_sid|}}}
+| base_sid = {{{base_sid|}}}
+| upgrade_sid = {{{upgrade_sid|}}}
+| hp = {{{hp|}}}
+| offence = {{{offence|}}}
+| defence = {{{defence|}}}
+| damage_min = {{{damage_min|}}}
+| damage_max = {{{damage_max|}}}
+| initiative = {{{initiative|}}}
+| speed = {{{speed|}}}
+| luck = {{{luck|}}}
+| morale = {{{morale|}}}
+| energy_per_cast = {{{energy_per_cast|}}}
+| energy_per_round = {{{energy_per_round|}}}
+| energy_per_take_damage = {{{energy_per_take_damage|}}}
+| action_points = {{{action_points|}}}
+| num_counters = {{{num_counters|}}}
+| morale_min = {{{morale_min|}}}
+| morale_max = {{{morale_max|}}}
+| luck_min = {{{luck_min|}}}
+| luck_max = {{{luck_max|}}}
+| move_type = {{{move_type|}}}
+| creature_type = {{{creature_type|}}}
+| immunities = {{{immunities|}}}
+| disablers = {{{disablers|}}}
+| shared_abilities = {{{shared_abilities|}}}
+| native_biome = {{{native_biome|}}}
+| ai_archetype = {{{ai_archetype|}}}
+| tags = {{{tags|}}}
+| leave_corpse = {{{leave_corpse|}}}
+| gold_cost = {{{gold_cost|}}}
+| wood_cost = {{{wood_cost|}}}
+| ore_cost = {{{ore_cost|}}}
+| mercury_cost = {{{mercury_cost|}}}
+| dust_cost = {{{dust_cost|}}}
+| crystal_cost = {{{crystal_cost|}}}
+| gemstone_cost = {{{gemstone_cost|}}}
+| squad_value = {{{squad_value|}}}
+| exp_bonus = {{{exp_bonus|}}}
+}}
+Created <code>Unit</code> entry: <code>{{{id|}}}</code></includeonly>

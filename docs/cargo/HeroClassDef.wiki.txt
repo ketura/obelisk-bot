@@ -1,0 +1,175 @@
+<noinclude>
+One row per hero class — exactly '''12 rows''', the cross-product of the 6 factions and the 2 class types (<code>might</code>, <code>magic</code>):
+
+{| class="wikitable"
+! Faction !! Might class !! Magic class
+|-
+| <code>human</code> || Knight || Cleric
+|-
+| <code>undead</code> || Death Knight || Necromancer
+|-
+| <code>dungeon</code> || Overlord || Warlock
+|-
+| <code>nature</code> || Warden || Druid
+|-
+| <code>demon</code> || Enforcer || Herald
+|-
+| <code>unfrozen</code> || Oathkeeper || Riftspeaker
+|}
+
+Each row holds the '''default values''' that every hero of that class inherits. Individual <code>HeroDef</code> rows carry only the ''deltas'' — fields the hero diverges from the class on (always <code>id</code>, <code>icon</code>, <code>specialization</code>,
+<code>startSquad</code>, <code>startSkills</code>, etc.; sometimes <code>stats</code>, <code>startLevel</code>,
+etc. for campaign and tutorial heroes who deviate from the canonical template). When a <code>HeroDef</code> row omits a class-level field, the wiki display layer joins to <code>HeroClassDef</code> to fill it in. See D-026.
+
+Empirical: across all 108 faction heroes, the 11 class-level fields listed below are '''invariant''' within each class — there are zero deviations from the template. Campaign (46) and tutorial (21) heroes universally override <code>stats</code> plus a small subset of other fields, treating the <code>HeroClassDef</code> row as a starting point.
+
+== Schema ==
+{{#cargo_declare:_table=HeroClass
+| id = String
+| name = String
+| description = Wikitext
+| name_sid = String
+| desc_sid = String
+| faction = String (allowed values=human,undead,dungeon,nature,demon,unfrozen)
+| class_type = String (allowed values=might,magic)
+| mesh = String
+| mount = String
+| native_biome = String
+| skills_roll_variant = String
+| cost_gold = Integer
+| start_level = Integer
+| attacks_times_before = String
+| view_radius = Integer
+| stats_num = Integer
+| magic_casts_per_round = Integer
+| enable_tactics = Boolean
+| tactics_placement_size = Integer
+| enable_hero_native_biome = Boolean
+| offence = Integer
+| defence = Integer
+| spell_power = Integer
+| intelligence = Integer
+| luck = Integer
+| morale = Integer
+| roll_lvl1_attack = Integer
+| roll_lvl1_defense = Integer
+| roll_lvl1_power = Integer
+| roll_lvl1_knowledge = Integer
+| roll_lvl24_attack = Integer
+| roll_lvl24_defense = Integer
+| roll_lvl24_power = Integer
+| roll_lvl24_knowledge = Integer
+}}
+
+<pre><nowiki>
+{{HeroClassDef
+| id = String                  <!-- e.g. magic_demon, might_human -->
+| name = String                <!-- e.g. Herald, Knight -->
+| description = Wikitext              <!-- shared per classType (might_desc / magic_desc) -->
+| name_sid = String
+| desc_sid = String
+
+| faction = String (allowed values=human,undead,dungeon,nature,demon,unfrozen)
+| class_type = String (allowed values=might,magic)
+
+<!-- Class defaults: every faction hero inherits these unchanged -->
+| mesh = String
+| mount = String                 <!-- single mount; source is a list, but always length 1 -->
+| native_biome = String
+| skills_roll_variant = String
+| cost_gold = Integer
+| start_level = Integer
+| attacks_times_before = String  <!-- comma-joined floats, e.g. "0.5" -->
+
+<!-- Stat block (full UnitStats-style flatten) -->
+| view_radius = Integer
+| stats_num = Integer
+| magic_casts_per_round = Integer
+| enable_tactics = Boolean
+| tactics_placement_size = Integer
+| enable_hero_native_biome = Boolean
+| offence = Integer
+| defence = Integer
+| spell_power = Integer
+| intelligence = Integer
+| luck = Integer
+| morale = Integer
+
+<!-- statsRolls flattened: always 2 bands (level 1 / level 24),
+     each with chance weights for which stat the level-up bonus
+     lands on. Source `v` indexes 0/1/2/3 are interpreted as
+     attack / defense / power / knowledge in that order. -->
+| roll_lvl1_attack = Integer
+| roll_lvl1_defense = Integer
+| roll_lvl1_power = Integer
+| roll_lvl1_knowledge = Integer
+| roll_lvl24_attack = Integer
+| roll_lvl24_defense = Integer
+| roll_lvl24_power = Integer
+| roll_lvl24_knowledge = Integer
+}}
+</nowiki></pre>
+
+== Field notes ==
+* '''<code>id</code>''' is <code><class_type>_<faction></code> (matches the L10n SID prefix). 12 fixed values: <code>might_human</code>, <code>magic_human</code>, … <code>magic_unfrozen</code>.
+* '''<code>name</code>''' comes from <code><class_type>_<faction>_name</code> SIDs (e.g. <code>magic_demon_name</code> → "Herald"). Full 16-language coverage on all 12 SIDs.
+* '''<code>desc</code>''' comes from one of two shared SIDs: <code>might_desc</code> or <code>magic_desc</code>. The same description appears on all 6 factions of a given type — Unfrozen reused it, faction doesn't matter for this text. Both SIDs have full 16-language coverage. '''All 6 might classes share the same <code>desc_sid='might_desc'</code>; all 6 magic classes share <code>desc_sid='magic_desc'</code>''' — translation duplication is intentional (one SID, six joined rows).
+* '''<code>mount</code>''' is singular here even though the source's <code>mounts</code> is a list, because every faction hero in the 2026-05-03 corpus has exactly one mount per class. If a future patch ships heroes with multiple mounts, promote this to a list-typed column or split it to a side table.
+* '''<code>stats</code>''' is flattened from the source's nested <code>stats</code> dict. All twelve fields present on every hero.
+* '''<code>statsRolls</code>''' is uniformly 2 bands × 4 chances across all 108 faction heroes. The second band always starts at level 24, and the chance-value tuple is always <code>v=(0, 1, 2, 3)</code> in that exact order. The <code>v</code> indexes don't appear in source data with any player-facing meaning, but their order matches the four primary stats — so the schema flattens them to named columns <code>roll_lvl<N>_<stat></code> (<code>attack</code>, <code>defense</code>, <code>power</code>, <code>knowledge</code>) holding the chance weight for that level-band / stat-bonus pair. Weights sum to 100 within each band. '''If a future patch reveals this stat-order assumption is wrong, the column names need to change accordingly''' — the JSON itself doesn't label them.
+
+== Override semantics ==
+The <code>HeroDef</code> table mirrors most of the columns above. When the bot emits a hero row:
+
+* '''Faction heroes (108):''' the bot omits all 11 class-level columns from the <code>HeroDef</code> row — they're all defaulted from <code>HeroClassDef</code>. Display layer reads the field from <code>HeroDef</code>; if absent, joins <code>HeroClassDef</code> on <code>Hero.class_id = HeroClass.id</code> and reads from there.
+* '''Campaign / tutorial heroes:''' the bot includes only the columns where the hero deviates from the class template. Empirically these are almost always <code>stats</code>, <code>attacks_times_before</code>, and <code>start_level</code>; sometimes <code>mesh</code>, <code>mounts</code>, <code>skills_roll_variant</code>. All other class-level columns stay defaulted.
+
+The override rule is a single Cargo query pattern:
+<code>COALESCE(Hero.<col>, HeroClass.<col>)</code> — Hero wins when present,
+HeroClass fills in otherwise.
+
+== Related tables ==
+* [[Template:HeroDef|Hero]] — joined on <code>Hero.class_id = HeroClass.id</code> (1:N). Hero rows hold only the per-hero data and any fields that override the class default.
+* [[HeroClassTranslation]] — joined on <code>id = class_id</code> (1:1) for the 15 non-English locales of <code>name</code> + <code>desc</code>.
+* [[Template:HeroSubClassDef|HeroSubClass]] — the named prestige classes (Swashbuckler, Paragon, etc.) that branch off each HeroClass at certain skill thresholds. Joined via <code>HeroSubClass.faction + HeroSubClass.class_type</code>.
+
+== Notes ==
+
+[[Category:Cargo Definitions]]
+</noinclude><includeonly>{{#cargo_store:_table=HeroClass
+| id = {{{id|}}}
+| name = {{{name|}}}
+| description = {{{description|}}}
+| name_sid = {{{name_sid|}}}
+| desc_sid = {{{desc_sid|}}}
+| faction = {{{faction|}}}
+| class_type = {{{class_type|}}}
+| mesh = {{{mesh|}}}
+| mount = {{{mount|}}}
+| native_biome = {{{native_biome|}}}
+| skills_roll_variant = {{{skills_roll_variant|}}}
+| cost_gold = {{{cost_gold|}}}
+| start_level = {{{start_level|}}}
+| attacks_times_before = {{{attacks_times_before|}}}
+| view_radius = {{{view_radius|}}}
+| stats_num = {{{stats_num|}}}
+| magic_casts_per_round = {{{magic_casts_per_round|}}}
+| enable_tactics = {{{enable_tactics|}}}
+| tactics_placement_size = {{{tactics_placement_size|}}}
+| enable_hero_native_biome = {{{enable_hero_native_biome|}}}
+| offence = {{{offence|}}}
+| defence = {{{defence|}}}
+| spell_power = {{{spell_power|}}}
+| intelligence = {{{intelligence|}}}
+| luck = {{{luck|}}}
+| morale = {{{morale|}}}
+| roll_lvl1_attack = {{{roll_lvl1_attack|}}}
+| roll_lvl1_defense = {{{roll_lvl1_defense|}}}
+| roll_lvl1_power = {{{roll_lvl1_power|}}}
+| roll_lvl1_knowledge = {{{roll_lvl1_knowledge|}}}
+| roll_lvl24_attack = {{{roll_lvl24_attack|}}}
+| roll_lvl24_defense = {{{roll_lvl24_defense|}}}
+| roll_lvl24_power = {{{roll_lvl24_power|}}}
+| roll_lvl24_knowledge = {{{roll_lvl24_knowledge|}}}
+}}
+Created <code>HeroClass</code> entry: <code>{{{id|}}}</code></includeonly>

@@ -50,7 +50,7 @@ _TRANSLATION_LANG_ORDER: tuple[str, ...] = (
 
 _UNIT_FIELD_ORDER: tuple[str, ...] = (
     "id", "unused", "faction", "tier", "source_path",
-    "name", "desc", "name_sid", "desc_sid", "base_sid", "upgrade_sid",
+    "name", "description", "name_sid", "desc_sid", "base_sid", "upgrade_sid",
     "hp", "offence", "defence", "damage_min", "damage_max",
     "initiative", "speed", "luck", "morale",
     "energy_per_cast", "energy_per_round", "energy_per_take_damage",
@@ -79,7 +79,7 @@ _TEMPLATE_NAME_BY_TYPE: dict[str, str] = {
 
 _IDENTITY_ORDER: tuple[str, ...] = (
     "ability_id", "unit_id", "ability_type", "ordinal", "variant",
-    "name", "desc", "name_sid", "desc_sid",
+    "name", "description", "name_sid", "desc_sid",
 )
 
 
@@ -449,7 +449,7 @@ def _entry_field_order() -> tuple[str, ...]:
     lang_pairs: list[str] = []
     for lang_dir in _TRANSLATION_LANG_ORDER:
         code = LANG_CODE[lang_dir]
-        lang_pairs.extend([f"{code}_name", f"{code}_desc"])
+        lang_pairs.extend([f"{code}_name", f"{code}_description"])
     return base + tuple(lang_pairs)
 
 
@@ -467,7 +467,7 @@ def _translation_field_order() -> tuple[str, ...]:
     lang_pairs: list[str] = []
     for lang_dir in _TRANSLATION_LANG_ORDER:
         code = LANG_CODE[lang_dir]
-        lang_pairs.extend([f"{code}_name", f"{code}_desc"])
+        lang_pairs.extend([f"{code}_name", f"{code}_description"])
     return base + tuple(lang_pairs)
 
 
@@ -524,7 +524,7 @@ def render_translation_block(
                 skill_level=skill_level,
             )
         if desc_sid:
-            params[f"{code}_desc"] = _lookup_text(
+            params[f"{code}_description"] = _lookup_text(
                 desc_sid, lang_dir, corpus, resolver, unit_json, ability_json,
                 spec_json=spec_json, magic_json=magic_json, set_json=set_json,
                 artifact_json=artifact_json, law_json=law_json,
@@ -619,7 +619,7 @@ def render_entry_block(
                 name_sid, lang_dir, corpus, resolver, None, None, **ctx,
             )
         if desc_sid:
-            params[f"{code}_desc"] = _lookup_text(
+            params[f"{code}_description"] = _lookup_text(
                 desc_sid, lang_dir, corpus, resolver, None, None, **ctx,
             )
 
@@ -938,7 +938,7 @@ def _unit_params(
         "tier": unit.tier,
         "source_path": unit.source_path,
         "name": en_name,
-        "desc": en_desc,
+        "description": en_desc,
         "name_sid": unit.name_sid,
         "desc_sid": unit.narrative_description_sid,
         "base_sid": unit.base_sid,
@@ -989,7 +989,7 @@ def _ability_params(
         "ordinal": ability.ordinal,
         "variant": ability.variant,
         "name": en_name,
-        "desc": en_desc,
+        "description": en_desc,
         "name_sid": ability.name_sid,
         "desc_sid": ability.desc_sid,
         "affected_stat": ability.affected_stat,

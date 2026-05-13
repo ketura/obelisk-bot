@@ -37,7 +37,7 @@ from obelisk.resolve import PlaceholderResolver
 _SKILL_FIELD_ORDER: tuple[str, ...] = (
     "id", "variant", "skill_type", "is_pseudo",
     "name", "name_sid",
-    "desc", "desc_sid",
+    "description", "desc_sid",
     "max_level",
     "source_path",
 )
@@ -45,7 +45,7 @@ _SKILL_FIELD_ORDER: tuple[str, ...] = (
 _SKILL_LEVEL_FIELD_ORDER: tuple[str, ...] = (
     "skill_id", "level",
     "name", "name_sid",
-    "desc", "desc_sid",
+    "description", "desc_sid",
     "icon",
     "offered_sub_skills",
 )
@@ -53,7 +53,7 @@ _SKILL_LEVEL_FIELD_ORDER: tuple[str, ...] = (
 _SUB_SKILL_FIELD_ORDER: tuple[str, ...] = (
     "id", "variant", "parent_skill_id",
     "name", "name_sid",
-    "desc", "desc_sid",
+    "description", "desc_sid",
     "icon",
     "source_path",
 )
@@ -93,7 +93,7 @@ def _render_skill_main(
         "is_pseudo": skill.is_pseudo,
         "name": en_name,
         "name_sid": skill.name_sid,
-        "desc": en_desc,
+        "description": en_desc,
         "desc_sid": skill.desc_sid,
         "max_level": len(skill.levels),
         "source_path": skill.source_path,
@@ -125,7 +125,7 @@ def _render_skill_level(
         "level": level.level,
         "name": en_name,
         "name_sid": level.name_sid,
-        "desc": en_desc,
+        "description": en_desc,
         "desc_sid": level.desc_sid,
         "icon": level.icon,
         "offered_sub_skills": (
@@ -190,7 +190,7 @@ def _render_sub_skill(
         "parent_skill_id": sub.parent_skill_id,
         "name": en_name,
         "name_sid": sub.name_sid,
-        "desc": en_desc,
+        "description": en_desc,
         "desc_sid": sub.desc_sid,
         "icon": sub.icon,
         "source_path": sub.source_path,

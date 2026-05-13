@@ -39,6 +39,35 @@ class WikiConfig:
     # it via the ``maxlag`` API parameter.
     requests_per_second: float = 0.5
     maxlag: int = 5
+    # Cloudflare / CDN bypass: a semicolon-separated list of
+    # ``name=value`` cookie pairs to inject into the requests session
+    # mwclient uses, before its first API call. Used for wikis that sit
+    # behind a Cloudflare managed-challenge — the operator passes the
+    # JS challenge in a browser once, grabs ``cf_clearance`` (and any
+    # session cookies) from devtools, and pastes them here. The
+    # configured ``user_agent`` must match the UA the browser used to
+    # issue cf_clearance, since CF binds the cookie to its issuing UA.
+    cookies: str = ""
+
+
+def parse_cookies(cookie_string: str) -> dict[str, str]:
+    """Parse a ``name=value; name=value`` cookie header into a dict.
+
+    Trims whitespace around each pair and around names/values. Silently
+    skips malformed pairs (no ``=``). Returns an empty dict for an
+    empty / whitespace-only input.
+    """
+    out: dict[str, str] = {}
+    for part in (cookie_string or "").split(";"):
+        part = part.strip()
+        if not part or "=" not in part:
+            continue
+        name, _, value = part.partition("=")
+        name = name.strip()
+        value = value.strip()
+        if name:
+            out[name] = value
+    return out
 
 
 def load_config(config_path: Path) -> WikiConfig:
@@ -61,4 +90,5 @@ def load_config(config_path: Path) -> WikiConfig:
         edit_summary=w.get("edit_summary", "obelisk-bot: patch sync"),
         requests_per_second=w.getfloat("requests_per_second", 0.5),
         maxlag=w.getint("maxlag", 5),
+        cookies=w.get("cookies", ""),
     )

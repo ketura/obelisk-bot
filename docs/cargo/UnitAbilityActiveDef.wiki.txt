@@ -1,0 +1,190 @@
+<noinclude>
+Splinter for <code>ability_type = active</code>. The biggest of the splinter tables — every active ability has a dealer, target params, and typically buff payload, plus optional damage tuning and shoot parameters.
+
+Join to <code>UnitAbilityDef</code> on <code>ability_id</code>.
+
+== Schema ==
+{{#cargo_declare:_table=UnitAbilityActive
+| ability_id = String
+| attack_type = String (allowed values=cast,end_move_attack,jump,melee,move,range,shoot)
+| rank = Integer
+| cd = Integer
+| energy_level = Integer
+| action_cost = Integer
+| charges = Integer
+| disable_for_ai = Boolean
+| never_disable = Boolean
+| move_type_active = String (allowed values=teleport,walk)
+| use_all_energy_levels = Boolean
+| dont_use_energy = Boolean
+| untargeted_cast = Boolean
+| instacast = Boolean
+| attack_pattern_sid = String
+| damage_target = String (allowed values=all,enemy,none,noself)
+| damage_type = String (allowed values=absolute,magic_pure,none,normal)
+| stat_dmg_mult = Float
+| trigger_counter = Boolean
+| multitarget_type = String (allowed values=ordered,simultaneous)
+| num_targets = Integer
+| dont_trigger_energy_regen = Boolean
+| return_to_start_after_attack = Boolean
+| min_base_dmg = Integer
+| max_base_dmg = Integer
+| min_stack_dmg = Integer
+| max_stack_dmg = Integer
+| min_damage_per_energy_level = Integer
+| max_damage_per_energy_level = Integer
+| damage_multipler_per_hero_level = Float
+| temp_self_buff = String
+| buff_sid = String
+| buff_target = String (allowed values=all,ally,allynoself,enemy,none,self)
+| buff_duration = Integer
+| buff_charges = Integer
+| shoot_range = Integer
+| shoot_threshold = Integer
+| shoot_red_count = Integer
+| shoot_dmg_buff = Float
+| use_speed_as_shoot_range = Boolean
+| cast_target = String (allowed values=all,ally,allynoself,enemy,none,noself,self)
+| cast_selection = String (allowed values=hex,hexOrObject,object)
+| cast_target_condition = String (allowed values=alive,all,dead)
+| cast_target_tags = List (,) of String
+| affect_target = String (allowed values=all,ally,allynoself,enemy,noself,self)
+| affect_selection = String (allowed values=hex,object)
+| affect_target_condition = String (allowed values=alive,all,dead)
+| affect_target_tags = List (,) of String
+}}
+
+<pre><nowiki>
+{{UnitAbilityActiveDef
+| ability_id = String                         <!-- FK -> UnitAbility.ability_id -->
+
+<!-- Active-row scalars (top-level keys on abilities[N] in the unit JSON) -->
+| attack_type = String (allowed values=cast,end_move_attack,jump,melee,move,range,shoot)
+| rank = Integer
+| cd = Integer                                <!-- -1 = once per battle, 0 = no cooldown, N = N rounds -->
+| energy_level = Integer
+| action_cost = Integer                       <!-- defaults to 1; 0 = does not end the unit's turn -->
+| charges = Integer
+| disable_for_ai = Boolean
+| never_disable = Boolean
+| move_type_active = String (allowed values=teleport,walk)   <!-- distinct from Unit.move_type -->
+| use_all_energy_levels = Boolean
+| dont_use_energy = Boolean
+| untargeted_cast = Boolean
+| instacast = Boolean
+
+<!-- damageDealer core fields -->
+| attack_pattern_sid = String                 <!-- 17 distinct; future Data:AttackPattern reference -->
+| damage_target = String (allowed values=all,enemy,none,noself)
+| damage_type = String (allowed values=absolute,magic_pure,none,normal)
+| stat_dmg_mult = Float                       <!-- 0.0 / 0.5 / 1.0 / 1.5 / 2.0 -->
+| trigger_counter = Boolean
+| multitarget_type = String (allowed values=ordered,simultaneous)
+| num_targets = Integer
+| dont_trigger_energy_regen = Boolean
+| return_to_start_after_attack = Boolean
+
+<!-- Direct damage tuning (rare; e.g. Bone Armageddon) -->
+| min_base_dmg = Integer
+| max_base_dmg = Integer
+| min_stack_dmg = Integer
+| max_stack_dmg = Integer
+| min_damage_per_energy_level = Integer
+| max_damage_per_energy_level = Integer
+| damage_multipler_per_hero_level = Float
+| temp_self_buff = String
+
+<!-- Buff applied -->
+| buff_sid = String                           <!-- 72+ distinct; future Data:Buff reference -->
+| buff_target = String (allowed values=all,ally,allynoself,enemy,none,self)
+| buff_duration = Integer                     <!-- -1 = infinite, 999 = until end of battle -->
+| buff_charges = Integer
+
+<!-- Ranged tuning (44 abilities, mostly arbitrator family) -->
+| shoot_range = Integer                       <!-- -1 = melee-only, 99 = "infinite" -->
+| shoot_threshold = Integer
+| shoot_red_count = Integer
+| shoot_dmg_buff = Float
+| use_speed_as_shoot_range = Boolean
+
+<!-- Cast target params (where the ability fires from) -->
+| cast_target = String (allowed values=all,ally,allynoself,enemy,none,noself,self)
+| cast_selection = String (allowed values=hex,hexOrObject,object)
+| cast_target_condition = String (allowed values=alive,all,dead)
+| cast_target_tags = List (,) of String
+
+<!-- Affect target params (who the ability hits) -->
+| affect_target = String (allowed values=all,ally,allynoself,enemy,noself,self)
+| affect_selection = String (allowed values=hex,object)
+| affect_target_condition = String (allowed values=alive,all,dead)
+| affect_target_tags = List (,) of String
+}}
+</nowiki></pre>
+
+== Field notes ==
+* '''<code>cd</code> sentinels:''' <code>-1</code> = once per battle (one charge regenerates only through specific abilities); <code>0</code> = no cooldown; positive = rounds.
+* '''<code>action_cost</code>:''' defaults to 1 (= consumes the unit's turn). <code>0</code> means the unit retains its action — wiki templates should display this as something like "free action" rather than rendering "0".
+* '''<code>stat_dmg_mult</code>''' is a multiplier on basic-attack damage. <code>1.0</code> = standard damage, <code>0.5</code> = halved (e.g. ranged AoE), <code>2.0</code> = doubled. When the field is missing on the source JSON, the engine treats it as <code>1.0</code>.
+'' ''*<code>buff_*</code> fields** are sparse — only populated for abilities that apply a buff (~25% of active abilities). The buff's actual stats live in <code>DB/buffs/</code>, joined via <code>buff_sid</code>. '' ''*<code>shoot_*</code> fields** apply mostly to the arbitrator family (paradoxical-shot mechanic) and a handful of other ranged abilities.
+* '''<code>cast_target_tags</code> / <code>affect_target_tags</code>''' are <code>List (,) of String</code> in Cargo — comma-separated in wiki, exposed as multi-row joins on Cargo's auxiliary <code>__values</code> table when queried.
+
+== Related tables ==
+* [[Template:UnitAbilityDef|UnitAbility]] — parent (1:1 on <code>ability_id</code>).
+* Future <code>Buff</code> table — joined on <code>buff_sid</code>.
+* Future <code>AttackPattern</code> table — joined on <code>attack_pattern_sid</code>.
+
+== Notes ==
+
+[[Category:Cargo Definitions]]
+</noinclude><includeonly>{{#cargo_store:_table=UnitAbilityActive
+| ability_id = {{{ability_id|}}}
+| attack_type = {{{attack_type|}}}
+| rank = {{{rank|}}}
+| cd = {{{cd|}}}
+| energy_level = {{{energy_level|}}}
+| action_cost = {{{action_cost|}}}
+| charges = {{{charges|}}}
+| disable_for_ai = {{{disable_for_ai|}}}
+| never_disable = {{{never_disable|}}}
+| move_type_active = {{{move_type_active|}}}
+| use_all_energy_levels = {{{use_all_energy_levels|}}}
+| dont_use_energy = {{{dont_use_energy|}}}
+| untargeted_cast = {{{untargeted_cast|}}}
+| instacast = {{{instacast|}}}
+| attack_pattern_sid = {{{attack_pattern_sid|}}}
+| damage_target = {{{damage_target|}}}
+| damage_type = {{{damage_type|}}}
+| stat_dmg_mult = {{{stat_dmg_mult|}}}
+| trigger_counter = {{{trigger_counter|}}}
+| multitarget_type = {{{multitarget_type|}}}
+| num_targets = {{{num_targets|}}}
+| dont_trigger_energy_regen = {{{dont_trigger_energy_regen|}}}
+| return_to_start_after_attack = {{{return_to_start_after_attack|}}}
+| min_base_dmg = {{{min_base_dmg|}}}
+| max_base_dmg = {{{max_base_dmg|}}}
+| min_stack_dmg = {{{min_stack_dmg|}}}
+| max_stack_dmg = {{{max_stack_dmg|}}}
+| min_damage_per_energy_level = {{{min_damage_per_energy_level|}}}
+| max_damage_per_energy_level = {{{max_damage_per_energy_level|}}}
+| damage_multipler_per_hero_level = {{{damage_multipler_per_hero_level|}}}
+| temp_self_buff = {{{temp_self_buff|}}}
+| buff_sid = {{{buff_sid|}}}
+| buff_target = {{{buff_target|}}}
+| buff_duration = {{{buff_duration|}}}
+| buff_charges = {{{buff_charges|}}}
+| shoot_range = {{{shoot_range|}}}
+| shoot_threshold = {{{shoot_threshold|}}}
+| shoot_red_count = {{{shoot_red_count|}}}
+| shoot_dmg_buff = {{{shoot_dmg_buff|}}}
+| use_speed_as_shoot_range = {{{use_speed_as_shoot_range|}}}
+| cast_target = {{{cast_target|}}}
+| cast_selection = {{{cast_selection|}}}
+| cast_target_condition = {{{cast_target_condition|}}}
+| cast_target_tags = {{{cast_target_tags|}}}
+| affect_target = {{{affect_target|}}}
+| affect_selection = {{{affect_selection|}}}
+| affect_target_condition = {{{affect_target_condition|}}}
+| affect_target_tags = {{{affect_target_tags|}}}
+}}
+Created <code>UnitAbilityActive</code> entry: <code>{{{ability_id|}}}</code></includeonly>

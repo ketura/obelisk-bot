@@ -1,0 +1,52 @@
+<noinclude>
+A named curated group of artifacts that grant additional bonuses when the hero equips multiple set pieces. 24 sets in the 2026-05-03 corpus, each containing 2-8 artifacts. Each set has 1-3 unlock tiers, each tier requiring a different number of equipped pieces to activate.
+
+The "item set" terminology preserves source naming — both the source JSON (<code>itemSet</code>, <code>itemsInSet</code>, <code>item_sets.json</code>) and players colloquially call these "item sets" rather than "artifact sets". The artifact entity itself was renamed to Artifact (per D-031), but the set wrapper keeps the older terminology for searchability.
+
+The bot emits each set at <code>Data:ItemSet/<id></code> carrying:
+
+# <code><nowiki>{{ItemSetDef | id=… | name=… | items_in_set=… | …}}</nowiki></code> — main row.
+# <code><nowiki>{{TranslationDef | type=item_set | target_id=<id> | …}}</nowiki></code> — name translations (per D-026).
+# For each tier: a <code><nowiki>{{ItemSetTierDef | id=… | required_amount=… | …}}</nowiki></code> row, a <code><nowiki>{{TranslationDef | type=item_set_tier | target_id=<tier_id> | <lang>_desc=… }}</nowiki></code> row (desc-only, no name), and N <code><nowiki>{{BonusDef | parent_type=item_set_tier | parent_id=<tier_id> | …}}</nowiki></code> rows.
+
+== Schema ==
+{{#cargo_declare:_table=ItemSet
+| id = String
+| name = String
+| name_sid = String
+| items_in_set = List (,) of String
+| source_path = String
+}}
+
+<pre><nowiki>
+{{ItemSetDef
+| id = String
+| name = String                  <!-- resolved English; translations on Translation rows -->
+| name_sid = String
+| items_in_set = List (,) of String  <!-- joins Artifact.id -->
+| source_path = String
+}}
+</nowiki></pre>
+
+== Field notes ==
+* '''<code>id</code>''' is the source JSON id (e.g. <code>tranquility_item_set</code>, <code>beelzebubs_blessing_item_set</code>).
+* '''<code>items_in_set</code>''' is the comma-joined list of artifact ids that belong to this set. Used by the wiki side to render a "set contents" panel; joined to <code>Artifact.id</code> per element.
+* Set sizes range from 2 to 8 artifacts (median 3-4).
+* '''No description on the set itself''' — descriptions are per-tier and live on <code>ItemSetTierDef</code>.
+
+== Related tables ==
+* [[Template:ItemSetTierDef|ItemSetTier]] — joined on <code>id = set_id</code> (1:N, 1-3 tiers per set).
+* [[Template:ArtifactDef|Artifact]] — <code>items_in_set</code> references <code>Artifact.id</code>; <code>Artifact.artifact_set_id</code> is the inverse pointer.
+* [[Template:TranslationDef|<code>TranslationDef</code>]] — one row per set with <code>type=item_set</code> (name only).
+
+== Notes ==
+
+[[Category:Cargo Definitions]]
+</noinclude><includeonly>{{#cargo_store:_table=ItemSet
+| id = {{{id|}}}
+| name = {{{name|}}}
+| name_sid = {{{name_sid|}}}
+| items_in_set = {{{items_in_set|}}}
+| source_path = {{{source_path|}}}
+}}
+Created <code>ItemSet</code> entry: <code>{{{id|}}}</code></includeonly>

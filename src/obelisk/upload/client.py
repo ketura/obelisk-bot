@@ -11,15 +11,21 @@ Responsibilities:
   and only subsequent calls within the rate window block.
 * Surface clear error messages on auth / quota issues; never raise to the
   caller without context.
+* Optional Cloudflare-bypass: when ``WikiConfig.cookies`` is set, build
+  a pre-warmed ``requests.Session`` carrying those cookies plus the
+  configured User-Agent and inject it into mwclient so the very first
+  API call (siteinfo, which fires inside ``mwclient.Site.__init__``)
+  already passes CF's managed challenge.
 """
 
 from __future__ import annotations
 
 import logging
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 
-from obelisk.upload.config import WikiConfig
+from obelisk.upload.config import WikiConfig, parse_cookies
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +35,29 @@ class UploadResult:
     title: str
     status: str  # written | unchanged | failed
     detail: str = ""
+
+
+@contextmanager
+def _injected_session(session):
+    """Temporarily make ``requests.Session()`` return ``session``.
+
+    mwclient builds its connection by calling ``requests.Session()``
+    inside ``Site.__init__``, and the first API call fires immediately
+    after — there's no post-construction injection point that runs
+    *before* the request goes out. Patching the factory globally for
+    the duration of construction is the least-fragile way to thread a
+    pre-warmed session (cookies + UA) through.
+
+    Restores the original factory on exit, including if construction
+    raised.
+    """
+    import requests
+    orig = requests.Session
+    requests.Session = lambda *a, **kw: session  # type: ignore[assignment]
+    try:
+        yield
+    finally:
+        requests.Session = orig  # type: ignore[assignment]
 
 
 class WikiClient:
@@ -67,6 +96,27 @@ class WikiClient:
                 self._sleep(min_interval - elapsed)
         self._last_call = self._monotonic()
 
+    def _build_prewarmed_session(self):
+        """Return a ``requests.Session`` pre-loaded with the configured
+        cookies and User-Agent, or ``None`` when no cookies are
+        configured (skip the bypass path entirely).
+
+        cf_clearance is bound to the User-Agent that issued it, so we
+        set the UA on the session BEFORE any request goes out — this
+        overrides mwclient's default ``MwClient/x.y …`` prefix that CF
+        would otherwise see on the first call.
+        """
+        cookies = parse_cookies(self.config.cookies)
+        if not cookies:
+            return None
+        import requests
+        session = requests.Session()
+        if self.config.user_agent:
+            session.headers["User-Agent"] = self.config.user_agent
+        for name, value in cookies.items():
+            session.cookies.set(name, value, domain=self.config.host)
+        return session
+
     def _connect(self):
         if self._site is not None:
             return self._site
@@ -81,7 +131,13 @@ class WikiClient:
             "clients_useragent": self.config.user_agent,
             "scheme": self.config.scheme,
         }
-        site = mwclient.Site(self.config.host, **site_kwargs)
+
+        prewarmed = self._build_prewarmed_session()
+        if prewarmed is not None:
+            with _injected_session(prewarmed):
+                site = mwclient.Site(self.config.host, **site_kwargs)
+        else:
+            site = mwclient.Site(self.config.host, **site_kwargs)
         # mwclient exposes maxlag via the api() kwarg path; setting it
         # on the Site is supported and threaded into every write.
         if self.config.maxlag > 0:

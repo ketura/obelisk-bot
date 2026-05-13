@@ -1,0 +1,126 @@
+<noinclude>
+One row per adventure-map structure pulled from <code>DB/objects_logic/</code> — '''roughly 150 rows''' in the 2026-05-05 corpus across ~22 categories (resource piles, mines, dwellings, banks, chests, taverns, markets, portals, shrines, uniques, etc.).
+
+Per D-035: the source data is heterogeneous (chests carry <code>variants</code> loot tables, hires carry <code>unitsData</code> + <code>bonuses</code>, mines carry
+<code>resArr</code>, etc.) but most of that variance is deferred. This pass
+captures the universal fields players care about — name, description, icon, basic combat / economy stats — plus a <code>source_path</code> pointer so editors can dig into the raw JSON for specifics the wiki doesn't yet surface.
+
+Battlefield-side objects (<code>DB/field_objects/obstacles</code>, <code>sentries</code>,
+<code>traps</code>) are out of scope for this table; they'll get their own
+treatment.
+
+== Page layout ==
+<code>Data:MapObject/<id></code> carries:
+
+# <code><nowiki>{{MapObjectDef | id=… | category=… | name=… | desc=… | …}}</nowiki></code>
+# <code><nowiki>{{TranslationDef | type=map_object | target_id=<id> | <lang>_name=… | <lang>_desc=… | …}}</nowiki></code>
+
+== Schema ==
+{{#cargo_declare:_table=MapObject
+| id = String
+| category = String
+| name = String
+| name_sid = String
+| description = Wikitext
+| desc_sid = String
+| narrative_desc = Wikitext
+| narrative_desc_sid = String
+| goods_value = Integer
+| ai_value = Integer
+| custom_guard_value = Integer
+| view_radius = Integer
+| ai_ignore = Boolean
+| guard_units = List (,) of String
+| fraction = String
+| tier = Integer
+| resource_name = String
+| resource_value = Integer
+| source_path = String
+}}
+
+<pre><nowiki>
+{{MapObjectDef
+| id = String
+| category = String              <!-- res, res_mines, magic_mines, hires, chests, event_banks, taverns, markets, item_markets, res_trade_labs, unit_res_trade_labs, outposts, garrisons, portals, sacrificial_shrine, fickle_shrines, mirages, insaras_eye, eternal_dragon, pocket_dimensions, chimerologist, prisons -->
+
+<!-- Identity / display -->
+| name = String
+| name_sid = String
+| description = Wikitext
+| desc_sid = String
+| narrative_desc = Wikitext
+| narrative_desc_sid = String
+
+<!-- Core scalars (sparse — only populated when present in source) -->
+| goods_value = Integer
+| ai_value = Integer
+| custom_guard_value = Integer
+| view_radius = Integer
+| ai_ignore = Boolean
+
+<!-- Combat: who guards this object. List of "<unit_sid>:<amount>" pairs -->
+| guard_units = List (,) of String
+
+<!-- Category-specific scalars (sparse) -->
+| fraction = String              <!-- hires faction membership: human, demon, ... -->
+| tier = Integer                 <!-- hires tier (1-7) -->
+| resource_name = String         <!-- res_mines / res producing-resource -->
+| resource_value = Integer       <!-- res_mines daily production amount -->
+
+| source_path = String           <!-- e.g. DB/objects_logic/res_mines/mines.json -->
+}}
+</nowiki></pre>
+
+== Field notes ==
+* '''<code>id</code>''' is the source JSON id (e.g. <code>mine_gold</code>, <code>barracks_human_3</code>, <code>celestial_sphere</code>, <code>tavern</code>, <code>portal_1</code>). No synthesis — the source ids are already globally unique.
+* '''<code>category</code>''' is the source folder name under <code>DB/objects_logic/</code>. Used for filtering (e.g. "all dwellings" → <code>WHERE category = 'hires'</code>).
+* '''<code>name_sid</code> / <code>desc_sid</code> / <code>narrative_desc_sid</code>''' follow the convention <code><id>_name</code> / <code><id>_description</code> / <code><id>_narrativeDescription</code> against <code>Lang/<locale>/texts/mapObjects.json</code>. ~94 of the ~150 rows have player-facing names; the rest (e.g. <code>tavern</code>, <code>outposts</code>, single-instance specials) get NULL name fields and rely on category for identification.
+* '''<code>goods_value</code>''' is the in-source AI/economy weight (the "value" of taking this object). Universal — present on virtually every entry.
+* '''<code>ai_value</code>''' / '''<code>custom_guard_value</code>''' appear on chests, hires, mines, resources — used by AI threat assessment.
+* '''<code>guard_units</code>''' is the comma-joined list of <code><sid>:<amount></code> pairs (e.g. <code>esquire:2,crossbowman:2</code>). NULL when source has empty <code>guardUnits</code>.
+* '''<code>fraction</code> / <code>tier</code>''' populated only for <code>category='hires'</code> (creature dwellings on the adventure map — ''not'' the city <code>Build_Tier_*</code> dwellings, which live on the Building table).
+* '''<code>resource_name</code> / <code>resource_value</code>''' populated only for <code>category='res_mines'</code> (daily producers like <code>mine_gold</code>) and selected <code>res</code> rows. The richer <code>resArr</code> chance-table for resource-pile randomization (used in <code>category='res'</code>) is ''not'' extracted in this pass — the source path is on the row for editors who need it.
+
+== Categories deliberately not extracted ==
+* '''<code>cities/</code>''' — already modeled in the [[Template:BuildingDef|Building]] table.
+* '''<code>items/</code>''' — these are placement metadata for artifacts on the map; the canonical Artifact data is in the [[Template:ArtifactDef|Artifact]] table.
+* '''<code>blocks/</code>, <code>todo/</code>''' — terrain blockers and dev TODOs, not player-facing.
+* '''<code>random_hires/</code>, <code>unit_upgrades/</code>, <code>town_gates/</code>, <code>win_condition_objects/</code>''' — generation/AI helpers and campaign-specific mechanics.
+
+== Deliberately not extracted (within in-scope categories) ==
+The rich category-specific payloads — chest <code>variants</code> loot tables, event-bank reward sets, hire <code>unitsData</code> weekly/bonus blocks, mine
+<code>bonuses</code> arrays, magic-mine <code>bonuses</code>, market trade rates, etc. —
+are out of scope for this pass. They'd each warrant their own side table (<code>MapObjectChestVariant</code>, <code>MapObjectEventBankReward</code>,
+<code>MapObjectDwellingUnit</code>, etc.) following the Building pattern.
+
+The <code>source_path</code> column on every row points editors at the source JSON file for those specifics until structured wiki coverage catches up.
+
+== Related tables ==
+* [[Template:TranslationDef|<code>TranslationDef</code>]] — one row per MapObject with <code>type='map_object'</code>, <code>target_id=id</code>.
+* [[Template:BuildingDef|Building]] — sibling table covering city-buildings (<code>DB/objects_logic/cities/</code>).
+* [[Template:ArtifactDef|Artifact]] — canonical artifact data; map placements in <code>DB/objects_logic/items/</code> reference these by id.
+* [[Template:UnitDef|Unit]] — <code>guard_units</code> entries reference Unit ids.
+
+[[Category:Cargo Definitions]]
+</noinclude><includeonly>{{#cargo_store:_table=MapObject
+| id = {{{id|}}}
+| category = {{{category|}}}
+| name = {{{name|}}}
+| name_sid = {{{name_sid|}}}
+| description = {{{description|}}}
+| desc_sid = {{{desc_sid|}}}
+| narrative_desc = {{{narrative_desc|}}}
+| narrative_desc_sid = {{{narrative_desc_sid|}}}
+| goods_value = {{{goods_value|}}}
+| ai_value = {{{ai_value|}}}
+| custom_guard_value = {{{custom_guard_value|}}}
+| view_radius = {{{view_radius|}}}
+| ai_ignore = {{{ai_ignore|}}}
+| guard_units = {{{guard_units|}}}
+| fraction = {{{fraction|}}}
+| tier = {{{tier|}}}
+| resource_name = {{{resource_name|}}}
+| resource_value = {{{resource_value|}}}
+| source_path = {{{source_path|}}}
+}}
+Created <code>MapObject</code> entry: <code>{{{id|}}}</code></includeonly>

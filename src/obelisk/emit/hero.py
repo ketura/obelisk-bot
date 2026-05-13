@@ -34,7 +34,7 @@ from obelisk.resolve import PlaceholderResolver
 
 
 _HERO_CLASS_FIELD_ORDER: tuple[str, ...] = (
-    "id", "name", "desc", "name_sid", "desc_sid",
+    "id", "name", "description", "name_sid", "desc_sid",
     "faction", "class_type",
     "mesh", "mount", "native_biome", "skills_roll_variant",
     "cost_gold", "start_level", "attacks_times_before",
@@ -69,7 +69,7 @@ def emit_hero_class_page(
     params: dict[str, Any] = {
         "id": hero_class.id,
         "name": en_name,
-        "desc": en_desc,
+        "description": en_desc,
         "name_sid": hero_class.name_sid,
         "desc_sid": hero_class.desc_sid,
         "faction": hero_class.faction,
@@ -126,7 +126,7 @@ def emit_hero_class_page(
 
 
 _HERO_FIELD_ORDER: tuple[str, ...] = (
-    "id", "name", "motto", "desc",
+    "id", "name", "motto", "description",
     "name_sid", "motto_sid", "desc_sid",
     "class_id", "faction", "class_type",
     "icon", "specialization_id",
@@ -192,7 +192,7 @@ def emit_hero_page(
         "id": hero.id,
         "name": en_name,
         "motto": en_motto,
-        "desc": en_desc,
+        "description": en_desc,
         "name_sid": hero.name_sid,
         "motto_sid": hero.motto_sid,
         "desc_sid": hero.desc_sid,
@@ -292,7 +292,7 @@ def emit_hero_page(
 
 
 _HERO_SPECIALIZATION_FIELD_ORDER: tuple[str, ...] = (
-    "id", "name", "desc", "name_sid", "desc_sid", "icon", "source_path",
+    "id", "name", "description", "name_sid", "desc_sid", "icon", "source_path",
 )
 
 _BONUS_FIELD_ORDER: tuple[str, ...] = (
@@ -357,7 +357,7 @@ def emit_hero_specialization_page(
     main_params: dict[str, Any] = {
         "id": spec.id,
         "name": en_name,
-        "desc": en_desc,
+        "description": en_desc,
         "name_sid": spec.name_sid,
         "desc_sid": spec.desc_sid,
         "icon": spec.icon,
@@ -391,7 +391,7 @@ def emit_hero_specialization_page(
 
 
 _HERO_SUB_CLASS_FIELD_ORDER: tuple[str, ...] = (
-    "id", "name", "desc", "name_sid", "desc_sid", "icon",
+    "id", "name", "description", "name_sid", "desc_sid", "icon",
     "faction", "class_type",
     "activation_skill_1_sid", "activation_skill_1_level",
     "activation_skill_2_sid", "activation_skill_2_level",
@@ -420,7 +420,7 @@ def emit_hero_sub_class_page(
     main_params: dict[str, Any] = {
         "id": sub_class.id,
         "name": en_name,
-        "desc": en_desc,
+        "description": en_desc,
         "name_sid": sub_class.name_sid,
         "desc_sid": sub_class.desc_sid,
         "icon": sub_class.icon,

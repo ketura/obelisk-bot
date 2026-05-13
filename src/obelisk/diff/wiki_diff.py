@@ -69,12 +69,19 @@ def wiki_title_for_relpath(relpath: str) -> str:
       ``coverage.wiki.txt`` -> ``Data:Coverage``.
     * ``data/<type>/_index.wiki.txt`` -> ``Data:<Table>`` (bare, no
       subpage). The index page is the namespace landing page.
+    * ``cargo_templates/<X>.wiki.txt`` -> ``Template:<X>``. Cargo def
+      docs land in the Template namespace so the wiki side resolves
+      ``{{XDef | ...}}`` transclusions against them.
     """
     p = Path(relpath)
     parts = p.parts
     # Top-level (extract-root) artifact pages.
     if len(parts) == 1:
         return _ROOT_FILES_TO_TITLE.get(parts[0], "")
+    # Cargo template docs -> Template namespace.
+    if parts[0] == "cargo_templates" and len(parts) == 2:
+        page_id = p.stem.replace(".wiki", "")
+        return f"Template:{page_id}"
     if parts[0] not in ("data", "Data"):
         return ""
     if len(parts) < 2:

@@ -32,7 +32,7 @@ from obelisk.resolve import PlaceholderResolver
 
 
 _FACTION_FIELD_ORDER: tuple[str, ...] = (
-    "id", "name", "desc",
+    "id", "name", "description",
     "icon", "icon_faction_laws",
     "biome", "resource",
     "name_sid", "desc_sid",
@@ -69,7 +69,7 @@ def emit_faction_page(
     faction_params: dict[str, Any] = {
         "id": faction.id,
         "name": en_name,
-        "desc": en_desc,
+        "description": en_desc,
         "icon": faction.icon or None,
         "icon_faction_laws": faction.icon_faction_laws or None,
         "biome": faction.biome or None,

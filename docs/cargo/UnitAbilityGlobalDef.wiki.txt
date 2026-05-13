@@ -1,0 +1,47 @@
+<noinclude>
+Splinter for <code>ability_type = global_passive</code>. Side-wide effects with no radius — the whole side (allies or enemies) is affected as long as the unit is on the battlefield. 11 instances in the 2026-05-03 corpus.
+
+Join to <code>UnitAbilityDef</code> on <code>ability_id</code>.
+
+== Schema ==
+{{#cargo_declare:_table=UnitAbilityGlobal
+| ability_id = String
+| target = String (allowed values=ally,enemy)
+| power = Integer
+| tag = String
+| affected_stat = String
+| affected_stat_amount = Float
+}}
+
+<pre><nowiki>
+{{UnitAbilityGlobalDef
+| ability_id = String                         <!-- FK -> UnitAbility.ability_id -->
+| target = String (allowed values=ally,enemy)
+| power = Integer
+| tag = String                                <!-- 5 distinct in the current corpus -->
+| affected_stat = String
+| affected_stat_amount = Float
+}}
+</nowiki></pre>
+
+== Field notes ==
+* '''<code>target</code>''' — which side this applies to. <code>ally</code> for unit-side buffs, <code>enemy</code> for unit-side debuffs (e.g. Olgoi's <code>enemy luck -1</code> aura). Note this column is named <code>target</code> here rather than the <code>global_target</code> it carries on the <code>UnitAbilityDef</code> model — the splinter's context disambiguates the prefix.
+* '''<code>power</code>''' scales with rank/upgrade level. Base unit might have <code>power=1</code>; the upg variant pushes the same effect to <code>power=2</code>.
+* '''<code>tag</code>''' identifies the global-passive family. Distinct values in 2026-05-03: <code>avatar_of_war_aura</code>, <code>black_dragon_ally_aura</code>, <code>black_dragon_enemy_aura</code>, <code>olgoi_aura</code>, <code>sunlight_cavalry_aura</code>. The tag is shared across variants of the same source unit, so it's a cheap way to find related rows.
+* '''<code>affected_stat</code> / <code>affected_stat_amount</code>''' describe the stat the global passive applies. Always a single stat in the current corpus.
+
+== Related tables ==
+* [[Template:UnitAbilityDef|UnitAbility]] — parent (1:1 on <code>ability_id</code>).
+
+== Notes ==
+
+[[Category:Cargo Definitions]]
+</noinclude><includeonly>{{#cargo_store:_table=UnitAbilityGlobal
+| ability_id = {{{ability_id|}}}
+| target = {{{target|}}}
+| power = {{{power|}}}
+| tag = {{{tag|}}}
+| affected_stat = {{{affected_stat|}}}
+| affected_stat_amount = {{{affected_stat_amount|}}}
+}}
+Created <code>UnitAbilityGlobal</code> entry: <code>{{{ability_id|}}}</code></includeonly>

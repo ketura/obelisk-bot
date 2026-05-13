@@ -1,0 +1,50 @@
+<noinclude>
+A unified Cargo table for bonus effects across multiple parent entity types. Per D-031: hero specializations, hero sub-classes, artifacts, item-set tiers, and faction laws all share one Bonus table with <code>parent_type</code> + <code>parent_id</code> discriminator columns.
+
+The bot emits each row inline on the parent entity's wiki page. There are no individual <code>Data:Bonus/…</code> pages.
+
+== Schema ==
+{{#cargo_declare:_table=Bonus
+| parent_type = String
+| parent_id = String
+| ordinal = Integer
+| type = String
+| parameters = List (,) of String
+| activation_level = Integer
+| upgrade_increment = Float
+| upgrade_level_step = Integer
+| receivers = List (,) of String
+| battle_type = String
+| receiver_role = String
+| receiver_allegiance = String
+| action_area = String
+| fraction = String
+}}
+
+== Field notes ==
+* Primary key is <code>(parent_type, parent_id, ordinal)</code>.
+* <code>parent_type</code> identifies the parent: <code>hero_specialization</code>, <code>hero_sub_class</code>, <code>artifact</code>, <code>item_set_tier</code>, <code>law_level</code>.
+* <code>type</code> is the effect category (~13 distinct values; <code>heroStat</code>, <code>unitStat</code>, <code>heroBattleAbility</code> most common).
+* <code>parameters</code> is comma-joined, type-dependent.
+* Sparse fields vary by parent type.
+* <code>action_area</code> (law-bonus only) qualifies which side an effect applies to.
+* <code>fraction</code> (law-bonus only) is a target-faction filter; column name preserves the source JSON's misspelling.
+
+[[Category:Cargo Definitions]]
+</noinclude><includeonly>{{#cargo_store:_table=Bonus
+| parent_type = {{{parent_type|}}}
+| parent_id = {{{parent_id|}}}
+| ordinal = {{{ordinal|}}}
+| type = {{{type|}}}
+| parameters = {{{parameters|}}}
+| activation_level = {{{activation_level|}}}
+| upgrade_increment = {{{upgrade_increment|}}}
+| upgrade_level_step = {{{upgrade_level_step|}}}
+| receivers = {{{receivers|}}}
+| battle_type = {{{battle_type|}}}
+| receiver_role = {{{receiver_role|}}}
+| receiver_allegiance = {{{receiver_allegiance|}}}
+| action_area = {{{action_area|}}}
+| fraction = {{{fraction|}}}
+}}
+Created <code>Bonus</code> entry: <code>{{{parent_type|}}}/{{{parent_id|}}} #{{{ordinal|}}}</code></includeonly>

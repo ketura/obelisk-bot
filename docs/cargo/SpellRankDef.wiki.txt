@@ -1,0 +1,131 @@
+<noinclude>
+This template defines and stores rows for the '''SpellRank''' Cargo table. Per-mastery-level data for a [[Template:SpellDef|Spell]]. Always 4 rows per spell — levels 1=no skill, 2=basic, 3=advanced, 4=expert. Each row is self-contained: it carries English defaults, mechanical fields, and 15 non-English translations of name + description + bonus_description.
+
+The bot emits these inline on the parent <code>Data:Spell/<id></code> page.
+
+== Schema ==
+{{#cargo_declare:_table=SpellRank
+| spell_id = String
+| level = Integer
+| name_sid = String
+| description_sid = String
+| description = Wikitext
+| bonus_description_sid = String
+| bonus_description = Wikitext
+| mana_cost = Integer
+| upgrade_cost = Integer
+| pt_br_name = String
+| pt_br_description = Wikitext
+| pt_br_bonus_description = Wikitext
+| cs_name = String
+| cs_description = Wikitext
+| cs_bonus_description = Wikitext
+| fr_name = String
+| fr_description = Wikitext
+| fr_bonus_description = Wikitext
+| de_name = String
+| de_description = Wikitext
+| de_bonus_description = Wikitext
+| hu_name = String
+| hu_description = Wikitext
+| hu_bonus_description = Wikitext
+| it_name = String
+| it_description = Wikitext
+| it_bonus_description = Wikitext
+| ja_name = String
+| ja_description = Wikitext
+| ja_bonus_description = Wikitext
+| ko_name = String
+| ko_description = Wikitext
+| ko_bonus_description = Wikitext
+| pl_name = String
+| pl_description = Wikitext
+| pl_bonus_description = Wikitext
+| ru_name = String
+| ru_description = Wikitext
+| ru_bonus_description = Wikitext
+| es_name = String
+| es_description = Wikitext
+| es_bonus_description = Wikitext
+| tr_name = String
+| tr_description = Wikitext
+| tr_bonus_description = Wikitext
+| uk_name = String
+| uk_description = Wikitext
+| uk_bonus_description = Wikitext
+| zh_cn_name = String
+| zh_cn_description = Wikitext
+| zh_cn_bonus_description = Wikitext
+| zh_tw_name = String
+| zh_tw_description = Wikitext
+| zh_tw_bonus_description = Wikitext
+}}
+
+== Field notes ==
+* Primary key is <code>(spell_id, level)</code>.
+* <code>name_sid</code> carries the spell's name SID — same across all four ranks; duplicated per-row for clean labelled per-rank queries.
+* <code>description</code> carries resolved English text. Hero-dependent placeholders (<code>{N}</code> for spell-power-scaled values) stay unsubstituted.
+* <code>bonus_description</code> is the unlock blurb at this level. Null at level 1.
+* Per-language columns are sparse — only emitted when the corresponding SID exists.
+
+== Related tables ==
+* [[Template:SpellDef|Spell]] — joined on <code>SpellRank.spell_id = Spell.id</code> (N:1).
+
+[[Category:Cargo Definitions]]
+</noinclude><includeonly>{{#cargo_store:_table=SpellRank
+| spell_id = {{{spell_id|}}}
+| level = {{{level|}}}
+| name_sid = {{{name_sid|}}}
+| description_sid = {{{description_sid|}}}
+| description = {{{description|}}}
+| bonus_description_sid = {{{bonus_description_sid|}}}
+| bonus_description = {{{bonus_description|}}}
+| mana_cost = {{{mana_cost|}}}
+| upgrade_cost = {{{upgrade_cost|}}}
+| pt_br_name = {{{pt_br_name|}}}
+| pt_br_description = {{{pt_br_description|}}}
+| pt_br_bonus_description = {{{pt_br_bonus_description|}}}
+| cs_name = {{{cs_name|}}}
+| cs_description = {{{cs_description|}}}
+| cs_bonus_description = {{{cs_bonus_description|}}}
+| fr_name = {{{fr_name|}}}
+| fr_description = {{{fr_description|}}}
+| fr_bonus_description = {{{fr_bonus_description|}}}
+| de_name = {{{de_name|}}}
+| de_description = {{{de_description|}}}
+| de_bonus_description = {{{de_bonus_description|}}}
+| hu_name = {{{hu_name|}}}
+| hu_description = {{{hu_description|}}}
+| hu_bonus_description = {{{hu_bonus_description|}}}
+| it_name = {{{it_name|}}}
+| it_description = {{{it_description|}}}
+| it_bonus_description = {{{it_bonus_description|}}}
+| ja_name = {{{ja_name|}}}
+| ja_description = {{{ja_description|}}}
+| ja_bonus_description = {{{ja_bonus_description|}}}
+| ko_name = {{{ko_name|}}}
+| ko_description = {{{ko_description|}}}
+| ko_bonus_description = {{{ko_bonus_description|}}}
+| pl_name = {{{pl_name|}}}
+| pl_description = {{{pl_description|}}}
+| pl_bonus_description = {{{pl_bonus_description|}}}
+| ru_name = {{{ru_name|}}}
+| ru_description = {{{ru_description|}}}
+| ru_bonus_description = {{{ru_bonus_description|}}}
+| es_name = {{{es_name|}}}
+| es_description = {{{es_description|}}}
+| es_bonus_description = {{{es_bonus_description|}}}
+| tr_name = {{{tr_name|}}}
+| tr_description = {{{tr_description|}}}
+| tr_bonus_description = {{{tr_bonus_description|}}}
+| uk_name = {{{uk_name|}}}
+| uk_description = {{{uk_description|}}}
+| uk_bonus_description = {{{uk_bonus_description|}}}
+| zh_cn_name = {{{zh_cn_name|}}}
+| zh_cn_description = {{{zh_cn_description|}}}
+| zh_cn_bonus_description = {{{zh_cn_bonus_description|}}}
+| zh_tw_name = {{{zh_tw_name|}}}
+| zh_tw_description = {{{zh_tw_description|}}}
+| zh_tw_bonus_description = {{{zh_tw_bonus_description|}}}
+}}
+Created <code>SpellRank</code> entry: <code>{{{spell_id|}}} (level {{{level|}}})</code></includeonly>
