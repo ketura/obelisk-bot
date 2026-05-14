@@ -12,8 +12,6 @@ The bot does not maintain rows here directly; this is hand-curated reference dat
 | rank = Integer
 | name_sid = String
 | desc_sid = String
-| display_name = String
-| description = Wikitext
 }}
 
 <pre><nowiki>
@@ -21,10 +19,9 @@ The bot does not maintain rows here directly; this is hand-curated reference dat
 | attack_passive_id = String                                <!-- enum value referenced by UnitAttack slots -->
 | pattern_token = String (allowed values=swipe,swirl,reach,rumble,tri_reach)
 | rank = Integer                                            <!-- 1 = no falloff; 2 = -X% to additional targets -->
+<!-- Localization references — display text lives in the Translation table, type='attack_passive' -->
 | name_sid = String                                         <!-- base_passive_strike_<token>_<rank>_name -->
 | desc_sid = String
-| display_name = String
-| description = Wikitext
 }}
 </nowiki></pre>
 
@@ -32,12 +29,11 @@ The bot does not maintain rows here directly; this is hand-curated reference dat
 * '''<code>attack_passive_id</code>''' is the primary key and the value <code>UnitAttackDef</code> rows reference (<code>default_passive</code>, <code>counter_passive</code>, <code>alt_passive</code>, <code>alt2_passive</code>). Stable, lowercase, snake_case.
 * '''<code>pattern_token</code>''' is the L10n SID's family token. Drives the <code>name_sid</code> / <code>desc_sid</code> derivation. Five canonical families.
 * '''<code>rank</code>''' distinguishes the falloff variant. Rank 1 = full damage to all hexes; rank 2 = additional targets take <code>–{0}%</code> damage (the percentage is unit-level — the <code>{0}</code> placeholder gets resolved per unit via <code>data.stats</code> blocks if present).
-* '''<code>name_sid</code> / <code>desc_sid</code>''' point at L10n entries. The translation table joins on these.
-* '''<code>display_name</code>''' / '''<code>description</code>''' are the resolved English defaults that render directly on the wiki without a join lookup.
+* '''<code>name_sid</code> / <code>desc_sid</code>''' point at L10n entries, surfaced for traceability. Display name / description for every language (English included) live in the [[Template:TranslationDef|Translation]] table, <code>type='attack_passive'</code>.
 
 == Canonical row contents ==
 {| class="wikitable"
-! <code>attack_passive_id</code> !! <code>pattern_token</code> !! <code>rank</code> !! <code>display_name</code> !! engine pattern_sid(s)
+! <code>attack_passive_id</code> !! <code>pattern_token</code> !! <code>rank</code> !! display name (en) !! engine pattern_sid(s)
 |-
 | <code>sweeping_strike</code> || swipe || 1 || Sweeping Strike || <code>attack_swipe_x100_x100</code>
 |-
@@ -68,7 +64,7 @@ Fighting Style ability text ("Performs a Cone Strike").
 
 == Related tables ==
 * [[../UnitAttack|<code>UnitAttackDef</code>]] — references via <code>default_passive</code>, <code>counter_passive</code>, <code>alt_passive</code>, <code>alt2_passive</code> (N:1 each).
-* [[AttackPassiveTranslation]] — joined on <code>attack_passive_id</code> (1:1).
+* [[Template:TranslationDef|Translation]] — display text in every language (English included), joined on <code>attack_passive_id = Translation.target_id WHERE Translation.type='attack_passive' AND Translation.language='{{{lang|en}}}'</code> (1:N, one row per language).
 
 [[Category:Cargo Definitions]]
 </noinclude><includeonly>{{#cargo_store:_table=AttackPassive
@@ -77,7 +73,5 @@ Fighting Style ability text ("Performs a Cone Strike").
 | rank = {{{rank|}}}
 | name_sid = {{{name_sid|}}}
 | desc_sid = {{{desc_sid|}}}
-| display_name = {{{display_name|}}}
-| description = {{{description|}}}
 }}
 Created <code>AttackPassive</code> entry: <code>{{{attack_passive_id|}}}</code></includeonly>

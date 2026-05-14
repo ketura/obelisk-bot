@@ -1,66 +1,31 @@
 <noinclude>
-A generic, hand-curated reference table for **named terms with no extra structure**. Every row carries:
+A generic, hand-curated reference table for '''named terms with no extra structure''' — the catch-all for any reference data that fits the "name + description + i18n" shape and nothing else. As soon as an entity needs ''additional'' columns (rank, pattern_token, cost, prerequisites, …) it belongs in its own dedicated table.
 
-* a '''type''' + '''subtype''' primary key
-* a player-facing '''display_name''' + '''description''' (English defaults)
-* an optional '''narrative_description''' for flavor/lore text (D-036)
-* the canonical L10n '''name_sid''' + '''desc_sid''' + optional '''narrative_description_sid''' the row was sourced from
+Entry is a '''thin structural stub'''. It carries only the identity and traceability of each term; all display text — names, descriptions, and their translations, English included — lives in the shared [[Template:TranslationDef|Translation]] table, whose <code>(type, subtype, variant)</code> key tiers match this row's <code>(type, subtype, variant)</code>.
+
+Each row carries:
+* a '''type''' + '''subtype''' + '''variant''' primary key
 * an optional '''icon''' filename
-* a '''source_path''' pointer to the L10n file (or source JSON for per-patch extracts) the row came from (D-036)
-* 15 × per-language '''<code><lang>_name</code>''' + '''<code><lang>_desc</code>''' columns
-
-This table is the catch-all for any reference data that fits the "name + description + i18n" shape and nothing else. As soon as an entity needs ''additional'' columns (rank, pattern_token, cost, prerequisites, etc.) it belongs in its own dedicated table.
+* the canonical L10n '''name_sid''' + '''desc_sid''' + optional '''narrative_description_sid''' the row was sourced from — traceability only, not part of the lookup path
+* a '''source_path''' pointer to the L10n file (or source JSON for per-patch extracts) the row came from
 
 Entry rows come from two sources:
 
 # '''Hand-curated seeds''' — small enums the wiki ships pre-populated (attack archetypes, movement types, creature types). These live in the <code>ENTRY_SEEDS</code> dict in <code>src/obelisk/emit/unit.py</code>.
 # '''Per-patch extracted data''' — name+i18n-only data harvested from the source JSON each patch (currently: faction city names from <code>DB/fractions/*.json</code>). The extractor module (<code>extract/faction.py</code>, etc.) hands the SID directly to <code>emit_entry_page</code>; no seed-dict detour.
 
-In both cases the bot resolves each row's translations from the L10n corpus on every extract, so per-patch text changes flow through.
+In both cases the bot resolves each row's translations from the L10n corpus on every extract and emits them as <code>Translation</code> rows, so per-patch text changes flow through.
 
 == Schema ==
 {{#cargo_declare:_table=Entry
 | type = String (allowed values=attack_archetype,movement,creature_type,FactionCityName,resource,hero_stat,unit_stat,law_level,skill_level)
 | subtype = String
 | variant = String
-| display_name = String
-| description = Wikitext
-| narrative_description = Wikitext
 | icon = String
 | name_sid = String
 | desc_sid = String
 | narrative_description_sid = String
 | source_path = String
-| pt_br_name = String
-| pt_br_description = Wikitext
-| cs_name = String
-| cs_description = Wikitext
-| fr_name = String
-| fr_description = Wikitext
-| de_name = String
-| de_description = Wikitext
-| hu_name = String
-| hu_description = Wikitext
-| it_name = String
-| it_description = Wikitext
-| ja_name = String
-| ja_description = Wikitext
-| ko_name = String
-| ko_description = Wikitext
-| pl_name = String
-| pl_description = Wikitext
-| ru_name = String
-| ru_description = Wikitext
-| es_name = String
-| es_description = Wikitext
-| tr_name = String
-| tr_description = Wikitext
-| uk_name = String
-| uk_description = Wikitext
-| zh_cn_name = String
-| zh_cn_description = Wikitext
-| zh_tw_name = String
-| zh_tw_description = Wikitext
 }}
 
 <pre><nowiki>
@@ -68,61 +33,28 @@ In both cases the bot resolves each row's translations from the L10n corpus on e
 | type = String (allowed values=attack_archetype,movement,creature_type,FactionCityName,resource,hero_stat,unit_stat,law_level,skill_level)
 | subtype = String
 | variant = String                            <!-- optional third key component for sub-row variants (level/rank); sparse -->
-| display_name = String
-| description = Wikitext
-| narrative_description = Wikitext
 | icon = String
 | name_sid = String
 | desc_sid = String
 | narrative_description_sid = String
 | source_path = String
-
-<!-- Per-language pairs. Each language gets a name + desc column. -->
-| pt_br_name = String
-| pt_br_description = Wikitext
-| cs_name = String
-| cs_description = Wikitext
-| fr_name = String
-| fr_description = Wikitext
-| de_name = String
-| de_description = Wikitext
-| hu_name = String
-| hu_description = Wikitext
-| it_name = String
-| it_description = Wikitext
-| ja_name = String
-| ja_description = Wikitext
-| ko_name = String
-| ko_description = Wikitext
-| pl_name = String
-| pl_description = Wikitext
-| ru_name = String
-| ru_description = Wikitext
-| es_name = String
-| es_description = Wikitext
-| tr_name = String
-| tr_description = Wikitext
-| uk_name = String
-| uk_description = Wikitext
-| zh_cn_name = String
-| zh_cn_description = Wikitext
-| zh_tw_name = String
-| zh_tw_description = Wikitext
 }}
 </nowiki></pre>
 
 == Field notes ==
-* '''Primary key is <code>(type, subtype, variant)</code>''' as a tuple. <code>variant</code> is sparse — it's set for sub-row translations (<code>type='law_level'</code>, <code>type='skill_level'</code>) where the same <code>(type, subtype)</code> pair needs to disambiguate per-level rows, and left unset for everything else. Joins from per-unit columns include the type discriminator: e.g. <code>UnitDef.attack_type</code> joins to <code>EntryDef.subtype WHERE EntryDef.type='attack_archetype'</code>.
-* '''<code>variant</code>''' carries sub-row indices for rows that fold per-(entity, level) data into this table — currently <code>type='law_level'</code> and <code>type='skill_level'</code> (folded back from the now-removed <code>LawLevelTranslationDef</code> and <code>SkillLevelTranslationDef</code>). String-typed so it can hold either integer levels (<code>"1"</code>, <code>"2"</code>, <code>"3"</code>) or freeform variant codes if future sub-rows need them.
-* '''<code>display_name</code> / <code>description</code>''' carry the English defaults inline. Translations live in the per-language columns on the same row. (No separate translation table — D-024 collapsed the <code><Entity></code> / <code><Entity>Translation</code> pair into one table per row.)
+* '''Primary key is <code>(type, subtype, variant)</code>''' as a tuple. <code>variant</code> is sparse — it's set for sub-row terms (<code>type='law_level'</code>, <code>type='skill_level'</code>) where the same <code>(type, subtype)</code> pair needs to disambiguate per-level rows, and left unset for everything else. Joins from per-unit columns include the type discriminator: e.g. <code>UnitDef.attack_type</code> joins to <code>EntryDef.subtype WHERE EntryDef.type='attack_archetype'</code>.
+* '''<code>variant</code>''' carries sub-row indices for rows that fold per-(entity, level) data into this table — currently <code>type='law_level'</code> and <code>type='skill_level'</code>. String-typed so it can hold either integer levels (<code>"1"</code>, <code>"2"</code>, <code>"3"</code>) or freeform variant codes if future sub-rows need them.
+* '''All display text is in [[Template:TranslationDef|Translation]]''', not here. To get the English label for an Entry term: <code>Translation.name WHERE type='<type>' AND subtype='<subtype>' AND variant='<variant>' AND language='en'</code>. Other languages swap the <code>language</code> filter.
 * '''<code>icon</code>''' is optional. Sparse-emit: if a seed has no icon configured, the field is omitted from the row.
-* '''<code>name_sid</code> / <code>desc_sid</code>''' are surfaced for traceability — they point at the L10n entries the row was sourced from. Useful for "find which game string drives this label" queries.
+* '''<code>name_sid</code> / <code>desc_sid</code> / <code>narrative_description_sid</code>''' are surfaced for traceability — they point at the L10n entries the row was sourced from. Useful for "find which game string drives this label" queries, but they are not the join path to translations.
 
 == Page layout ==
-Each Entry <code>type</code> gets its own top-level wiki namespace and on-disk directory — the <code>EntryDef</code> Cargo table name only surfaces in the table schema and the <code><nowiki>{{EntryDef | …}}</nowiki></code> template invocations ''inside'' each page. The <code>EntryDef</code> abstraction is internal; user-facing wiki paths use the per-domain names that already exist as game concepts.
+Each Entry <code>type</code> gets its own top-level wiki namespace and on-disk directory — the <code>EntryDef</code> Cargo table name only surfaces in the table schema and the <code><nowiki>{{EntryDef | … }}</nowiki></code> template invocations ''inside'' each page. The <code>EntryDef</code> abstraction is internal; user-facing wiki paths use the per-domain names that already exist as game concepts.
 
 * '''On wiki:''' <code>Data:<PascalType>/<subtype></code> (e.g. <code>Data:Movement/fly</code>).
 * '''On disk:''' <code>data/<type>/<subtype>.wiki.txt</code> (e.g. <code>data/movement/fly.wiki.txt</code>).
+
+Each Entry page emits the <code><nowiki>{{EntryDef}}</nowiki></code> stub row followed by one <code><nowiki>{{TranslationDef}}</nowiki></code> row per language.
 
 Examples:
 
@@ -141,13 +73,11 @@ Examples:
 The directory→wiki-namespace mapping lives in <code>_DIR_TO_WIKI_TABLE</code> (<code>src/obelisk/diff/wiki_diff.py</code>) — extend it when adding a new Entry type.
 
 == Initial canonical content ==
-These three types ship in the initial Entry rollout. Each row's
-<code>display_name</code> and <code>description</code> come from the L10n corpus via
-<code>name_sid</code> / <code>desc_sid</code> on every extract; the table below summarizes.
+These three types ship in the initial Entry rollout. Each row's name and description come from the L10n corpus via <code>name_sid</code> / <code>desc_sid</code> on every extract and land in the <code>Translation</code> table; the tables below summarize.
 
 === <code>type=attack_archetype</code> (3 rows) ===
 {| class="wikitable"
-! <code>subtype</code> !! <code>display_name</code> !! <code>name_sid</code>
+! <code>subtype</code> !! display name (en) !! <code>name_sid</code>
 |-
 | <code>melee</code> || Melee Attack || <code>base_passive_melee_attack_name</code>
 |-
@@ -156,12 +86,11 @@ These three types ship in the initial Entry rollout. Each row's
 | <code>reach</code> || Long Reach || <code>base_passive_remote_attack_name</code>
 |}
 
-JSON enum mapping (in <code>extract/unit.py</code>): <code>melee → melee</code>,
-<code>shoot → ranged</code>, <code>range → reach</code>. Naming flip on <code>range</code>→<code>reach</code>.
+JSON enum mapping (in <code>extract/unit.py</code>): <code>melee → melee</code>, <code>shoot → ranged</code>, <code>range → reach</code>. Naming flip on <code>range</code>→<code>reach</code>.
 
 === <code>type=movement</code> (2 rows) ===
 {| class="wikitable"
-! <code>subtype</code> !! <code>display_name</code> !! <code>name_sid</code>
+! <code>subtype</code> !! display name (en) !! <code>name_sid</code>
 |-
 | <code>fly</code> || Flying || <code>base_passive_flyer_name</code>
 |-
@@ -172,7 +101,7 @@ Naming flip on <code>teleport</code> enum → "Blink" display. Walkers are encod
 
 === <code>type=creature_type</code> (7 rows) ===
 {| class="wikitable"
-! <code>subtype</code> !! <code>display_name</code> !! <code>name_sid</code>
+! <code>subtype</code> !! display name (en) !! <code>name_sid</code>
 |-
 | <code>living</code> || Living || <code>base_class_living</code>
 |-
@@ -189,24 +118,18 @@ Naming flip on <code>teleport</code> enum → "Blink" display. Walkers are encod
 | <code>construct</code> || Construct || <code>base_class_construct</code>
 |}
 
-Naming flip on <code>demon</code> enum → "Hive Spawn" display. Description text contains placeholders that are pre-substituted at extract time via
-<code>Lang/args/unitsAbility.json</code> + <code>units.script</code> (class-wide morale and
-luck range bounds).
+Naming flip on <code>demon</code> enum → "Hive Spawn" display. Description text contains placeholders that are pre-substituted at extract time via <code>Lang/args/unitsAbility.json</code> + <code>units.script</code> (class-wide morale and luck range bounds).
 
 === <code>type=FactionCityName</code> (120 rows; per-patch extracted) ===
-Six factions × 20 names each. Subtype is <code><faction>_<index></code> (e.g.
-<code>dungeon_1</code> … <code>dungeon_20</code>). Source: <code>cityNames</code> array on each
-faction record in <code>DB/fractions/*.json</code>. Display names are genuinely translated (8-16 distinct strings per name across the 16 languages — CJK languages get full character-set translations; Latin scripts mix preservation, idiomatic translation, and phonetic transliteration). '''No <code>desc_sid</code> exists for city names''' — description columns are sparse-emitted. See D-025.
+Six factions × 20 names each. Subtype is <code><faction>_<index></code> (e.g. <code>dungeon_1</code> … <code>dungeon_20</code>). Source: <code>cityNames</code> array on each faction record in <code>DB/fractions/*.json</code>. Display names are genuinely translated (8-16 distinct strings per name across the 16 languages — CJK languages get full character-set translations; Latin scripts mix preservation, idiomatic translation, and phonetic transliteration). '''No <code>desc_sid</code> exists for city names''' — description translation rows are simply not emitted.
 
-Unlike the rows above, these are not hand-curated seeds — they're extracted per-patch from the source JSON. They also do ''not'' live on individual wiki pages: the 20 city Entry rows for a given faction are appended to that faction's <code>Data:Faction/<id></code> page (after the
-<code><nowiki>{{FactionDef}}</nowiki></code> and <code><nowiki>{{FactionTranslation}}</nowiki></code> blocks, in numeric source
-order). Cargo stores the rows in the unified <code>EntryDef</code> table just the same; the page-name namespace <code>Data:FactionCityName/…</code> simply isn't used. The faction emitter calls <code>render_entry_block(...)</code> to inline each row.
+Unlike the rows above, these are not hand-curated seeds — they're extracted per-patch from the source JSON. They also do ''not'' live on individual wiki pages: the 20 city Entry stubs for a given faction (plus their Translation rows) are appended to that faction's <code>Data:Faction/<id></code> page, in numeric source order. The faction emitter calls <code>render_entry_block(...)</code> to inline each row.
 
 == What does NOT belong here ==
 Anything with structure beyond name/description/i18n keeps its own table. For example, <code>AttackPassiveDef</code> carries <code>pattern_token</code> and <code>rank</code> columns and stays separate. The rule: if you'd add a column for a single use case, it goes in its own dedicated table. Entry is for the "identical shape, different domain" cases only.
 
 == Related ==
-* D-024 establishes the Entry catch-all rule and supersedes the earlier per-domain tables (D-021 partial, D-022, D-023).
+* [[Template:TranslationDef|Translation]] — every Entry term's display text (all languages) lives there, keyed by matching <code>(type, subtype, variant)</code>.
 * [[../Unit|<code>UnitDef</code>]] — references multiple Entry types via <code>attack_type</code>, <code>move_type</code>, <code>creature_type</code> columns.
 * [[Template:AttackPassiveDef|AttackPassive]] — separate table; has columns beyond the Entry shape.
 
@@ -215,43 +138,10 @@ Anything with structure beyond name/description/i18n keeps its own table. For ex
 | type = {{{type|}}}
 | subtype = {{{subtype|}}}
 | variant = {{{variant|}}}
-| display_name = {{{display_name|}}}
-| description = {{{description|}}}
-| narrative_description = {{{narrative_description|}}}
 | icon = {{{icon|}}}
 | name_sid = {{{name_sid|}}}
 | desc_sid = {{{desc_sid|}}}
 | narrative_description_sid = {{{narrative_description_sid|}}}
 | source_path = {{{source_path|}}}
-| pt_br_name = {{{pt_br_name|}}}
-| pt_br_description = {{{pt_br_description|}}}
-| cs_name = {{{cs_name|}}}
-| cs_description = {{{cs_description|}}}
-| fr_name = {{{fr_name|}}}
-| fr_description = {{{fr_description|}}}
-| de_name = {{{de_name|}}}
-| de_description = {{{de_description|}}}
-| hu_name = {{{hu_name|}}}
-| hu_description = {{{hu_description|}}}
-| it_name = {{{it_name|}}}
-| it_description = {{{it_description|}}}
-| ja_name = {{{ja_name|}}}
-| ja_description = {{{ja_description|}}}
-| ko_name = {{{ko_name|}}}
-| ko_description = {{{ko_description|}}}
-| pl_name = {{{pl_name|}}}
-| pl_description = {{{pl_description|}}}
-| ru_name = {{{ru_name|}}}
-| ru_description = {{{ru_description|}}}
-| es_name = {{{es_name|}}}
-| es_description = {{{es_description|}}}
-| tr_name = {{{tr_name|}}}
-| tr_description = {{{tr_description|}}}
-| uk_name = {{{uk_name|}}}
-| uk_description = {{{uk_description|}}}
-| zh_cn_name = {{{zh_cn_name|}}}
-| zh_cn_description = {{{zh_cn_description|}}}
-| zh_tw_name = {{{zh_tw_name|}}}
-| zh_tw_description = {{{zh_tw_description|}}}
 }}
-Created <code>Entry</code> entry: <code>{{{type|}}}/{{{subtype|}}}</code></includeonly>
+Created <code>Entry</code> entry: <code>{{{type|}}}/{{{subtype|}}}/{{{variant|}}}</code></includeonly>

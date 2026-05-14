@@ -3,15 +3,13 @@ A named prestige class — Swashbuckler, Paragon, Grand Inquisitor, Ascendant, e
 
 The bot emits each sub-class at <code>Data:HeroSubClass/<id></code> carrying:
 
-# <code><nowiki>{{HeroSubClassDef | id=… | name=… | desc=… | activation_skill_1_sid=… | …}}</nowiki></code> — main row with the 5 activation thresholds inline.
-# <code><nowiki>{{TranslationDef | type=hero_sub_class | target_id=<id> | …}}</nowiki></code> — name/description translations (per D-026).
+# <code><nowiki>{{HeroSubClassDef | id=… | activation_skill_1_sid=… | …}}</nowiki></code> — main row with the 5 activation thresholds inline.
+# N × <code><nowiki>{{TranslationDef | type=hero_sub_class | target_id=<id> | language=… | …}}</nowiki></code> — name/description, one row per language.
 # N × <code><nowiki>{{HeroSubClassBonus | sub_class_id=<id> | ordinal=N | …}}</nowiki></code> — the unlocked passive bonuses (~2 per sub-class, 46 total).
 
 == Schema ==
 {{#cargo_declare:_table=HeroSubClass
 | id = String
-| name = String
-| description = Wikitext
 | name_sid = String
 | desc_sid = String
 | icon = String
@@ -33,8 +31,8 @@ The bot emits each sub-class at <code>Data:HeroSubClass/<id></code> carrying:
 <pre><nowiki>
 {{HeroSubClassDef
 | id = String                            <!-- sub_class_<faction>_<might|magic>_<1|2> -->
-| name = String
-| description = Wikitext
+
+<!-- Localization references — display text lives in the Translation table, type='hero_sub_class' -->
 | name_sid = String
 | desc_sid = String
 | icon = String
@@ -45,7 +43,7 @@ The bot emits each sub-class at <code>Data:HeroSubClass/<id></code> carrying:
 <!-- 5 activation thresholds, flattened. Every sub-class has exactly 5
      in the 2026-05-03 corpus. Each pair references a future Skill SID
      and the rank the hero must reach. subSkillSids (always empty in
-     2026-05-03) is dropped per D-029. -->
+     2026-05-03) is dropped. -->
 | activation_skill_1_sid = String
 | activation_skill_1_level = Integer
 | activation_skill_2_sid = String
@@ -63,8 +61,8 @@ The bot emits each sub-class at <code>Data:HeroSubClass/<id></code> carrying:
 
 == Field notes ==
 * '''<code>id</code>''' matches the L10n SID prefix (e.g. <code>sub_class_human_might_1</code> → "Swashbuckler").
-* '''<code>name_sid</code> / <code>desc_sid</code>''' point at <code><id>_name</code> / <code><id>_desc</code>. Full 16-language coverage.
-* '''<code>name</code> / <code>desc</code>''' carry the resolved English text inline. Translations live on the <code><nowiki>{{TranslationDef | type=hero_sub_class}}</nowiki></code> row.
+* '''<code>name_sid</code> / <code>desc_sid</code>''' point at <code><id>_name</code> / <code><id>_desc</code>, surfaced for traceability. Full 16-language coverage.
+* '''Display name / description''' for every language (English included) live in the [[Template:TranslationDef|Translation]] table, <code>type='hero_sub_class'</code>.
 * '''Activation conditions are joined by AND''' — the hero must hit all 5 skill thresholds to unlock the sub-class.
 * '''Per-faction-class matchup:''' every (faction × class_type) cell has exactly 2 sub-classes. Looking up "what sub-classes are available to a magic Demon hero?" → <code>WHERE faction='demon' AND class_type='magic'</code> → 2 rows (Progenitor, Lord of Chaos).
 
@@ -72,16 +70,14 @@ The bot emits each sub-class at <code>Data:HeroSubClass/<id></code> carrying:
 * [[Template:HeroDef|Hero]] — joins via <code>Hero.faction = HeroSubClass.faction AND Hero.class_type = HeroSubClass.class_type</code>. Each hero qualifies for the 2 sub-classes in their faction × class_type cell.
 * [[Template:HeroClassDef|HeroClass]] — same join; HeroSubClass is the prestige progression on top of the broader HeroClass.
 * [[HeroSubClassBonus]] — joined on <code>id = sub_class_id</code> (1:N).
-'' <code>SkillDef</code> — ''(future table; joined on activation_skill_<N>_sid)*.
-* [[Template:TranslationDef|<code>TranslationDef</code>]] — one row per sub-class with <code>type=hero_sub_class</code>.
+* [[Template:SkillDef|Skill]] — joined on <code>activation_skill_<N>_sid = Skill.id</code>.
+* [[Template:TranslationDef|Translation]] — display text in every language (English included), joined on <code>id = Translation.target_id WHERE Translation.type='hero_sub_class' AND Translation.language='{{{lang|en}}}'</code> (1:N, one row per language).
 
 == Notes ==
 
 [[Category:Cargo Definitions]]
 </noinclude><includeonly>{{#cargo_store:_table=HeroSubClass
 | id = {{{id|}}}
-| name = {{{name|}}}
-| description = {{{description|}}}
 | name_sid = {{{name_sid|}}}
 | desc_sid = {{{desc_sid|}}}
 | icon = {{{icon|}}}

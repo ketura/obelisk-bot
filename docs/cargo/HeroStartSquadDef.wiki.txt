@@ -8,7 +8,7 @@ The bot emits these rows on the parent <code>Data:Hero/<id></code> page, after t
 | hero_id = String
 | variant = String (allowed values=primary,alt)
 | slot = Integer
-| unit_sid = String
+| unit_id = String
 | min = Integer
 | max = Integer
 }}
@@ -18,7 +18,7 @@ The bot emits these rows on the parent <code>Data:Hero/<id></code> page, after t
 | hero_id = String                <!-- joins Hero.id -->
 | variant = String (allowed values=primary,alt)
 | slot = Integer                  <!-- 1-based position within the variant -->
-| unit_sid = String               <!-- joins Unit.id -->
+| unit_id = String                <!-- joins Unit.id -->
 | min = Integer
 | max = Integer
 }}
@@ -26,13 +26,13 @@ The bot emits these rows on the parent <code>Data:Hero/<id></code> page, after t
 
 == Field notes ==
 * '''Primary key is <code>(hero_id, variant, slot)</code>'''.
-* '''<code>variant</code>''' distinguishes the source's parallel arrays <code>startSquad</code> (primary) and <code>startSquadAlt</code> (alt). Source data has alt as always exactly 1 slot of the form <code>(unit_sid, min=1, max=1)</code> in the 2026-05-03 corpus, but the schema preserves min/max in case future patches diverge.
-* '''<code>unit_sid</code>''' references a <code>Unit.id</code> (e.g. <code>esquire</code>, <code>crossbowman</code>, <code>griffin</code>).
+* '''<code>variant</code>''' distinguishes the source's parallel arrays <code>startSquad</code> (primary) and <code>startSquadAlt</code> (alt). Source data has alt as always exactly 1 slot of the form <code>(unit_id, min=1, max=1)</code> in the 2026-05-03 corpus, but the schema preserves min/max in case future patches diverge.
+* '''<code>unit_id</code>''' references a <code>Unit.id</code> (e.g. <code>esquire</code>, <code>crossbowman</code>, <code>griffin</code>). The source JSON's key is <code>sid</code> but the column name uses <code>_id</code> to match the foreign-key convention used elsewhere — the <code>_sid</code> suffix is reserved for L10n token references.
 * '''<code>min</code>/<code>max</code>''' define the random count range for that slot at battle start. Primary slots have meaningful ranges (e.g. 14-20 esquires); alt slots are typically 1-1.
 
 == Related tables ==
 * [[Template:HeroDef|Hero]] — joined on <code>hero_id = id</code> (N:1).
-* [[Template:UnitDef|Unit]] — joined on <code>unit_sid = id</code> (N:1).
+* [[Template:UnitDef|Unit]] — joined on <code>unit_id = id</code> (N:1).
 
 == Notes ==
 
@@ -41,7 +41,7 @@ The bot emits these rows on the parent <code>Data:Hero/<id></code> page, after t
 | hero_id = {{{hero_id|}}}
 | variant = {{{variant|}}}
 | slot = {{{slot|}}}
-| unit_sid = {{{unit_sid|}}}
+| unit_id = {{{unit_id|}}}
 | min = {{{min|}}}
 | max = {{{max|}}}
 }}

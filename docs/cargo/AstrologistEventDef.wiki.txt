@@ -6,16 +6,14 @@ A single discriminator column <code>category</code> separates weeks from months 
 == Page layout ==
 <code>Data:AstrologistEvent/<id></code> carries:
 
-# <code><nowiki>{{AstrologistEventDef | id=… | category=week|month | name=… | desc=… | …}}</nowiki></code>
-# <code><nowiki>{{TranslationDef | type=astrologist_event | target_id=<id> | …}}</nowiki></code> — name+desc in the 16 supported languages
+# <code><nowiki>{{AstrologistEventDef | id=… | category=week|month | …}}</nowiki></code>
+# N × <code><nowiki>{{TranslationDef | type=astrologist_event | target_id=<id> | language=… | …}}</nowiki></code> — name+description, one row per language
 
 == Schema ==
 {{#cargo_declare:_table=AstrologistEvent
 | id = String
 | category = String
-| name = String
 | name_sid = String
-| description = Wikitext
 | desc_sid = String
 | icon = String
 | buff_sid = String
@@ -28,9 +26,8 @@ A single discriminator column <code>category</code> separates weeks from months 
 {{AstrologistEventDef
 | id = String
 | category = String              <!-- week | month -->
-| name = String                  <!-- resolved English -->
+<!-- Localization references — display text lives in the Translation table, type='astrologist_event' -->
 | name_sid = String
-| description = Wikitext                <!-- resolved English -->
 | desc_sid = String              <!-- nullable -->
 | icon = String                  <!-- nullable -->
 | buff_sid = String              <!-- nullable; pointer into DB/buffs/ for the actual mechanical effect -->
@@ -48,15 +45,13 @@ A single discriminator column <code>category</code> separates weeks from months 
 * '''<code>count_to_return</code>''' is the global re-roll cooldown — the same event can't repeat within this many ticks. Stored per row (rather than as a global config) so queries don't need a join. Currently 3 for weeks and (a different value, see <code>weeks_info.json</code>) for months.
 
 == Related tables ==
-* [[Template:TranslationDef|<code>TranslationDef</code>]] — one row per event with <code>type=astrologist_event</code>, <code>target_id=id</code>.
+* [[Template:TranslationDef|Translation]] — display text in every language (English included), joined on <code>id = Translation.target_id WHERE Translation.type='astrologist_event' AND Translation.language='{{{lang|en}}}'</code> (1:N, one row per language).
 
 [[Category:Cargo Definitions]]
 </noinclude><includeonly>{{#cargo_store:_table=AstrologistEvent
 | id = {{{id|}}}
 | category = {{{category|}}}
-| name = {{{name|}}}
 | name_sid = {{{name_sid|}}}
-| description = {{{description|}}}
 | desc_sid = {{{desc_sid|}}}
 | icon = {{{icon|}}}
 | buff_sid = {{{buff_sid|}}}

@@ -7,9 +7,7 @@ Each level carries optional name / desc / icon overrides (rare — most levels i
 {{#cargo_declare:_table=SkillLevel
 | skill_id = String
 | level = Integer
-| name = String
 | name_sid = String
-| description = Wikitext
 | desc_sid = String
 | icon = String
 | offered_sub_skills = List (,) of String
@@ -19,9 +17,7 @@ Each level carries optional name / desc / icon overrides (rare — most levels i
 {{SkillLevelDef
 | skill_id = String
 | level = Integer                          <!-- 1-based; 1..max_level -->
-| name = String                            <!-- resolved English; nullable -->
 | name_sid = String                        <!-- nullable; per-level override only -->
-| description = Wikitext                          <!-- resolved English; nullable -->
 | desc_sid = String                        <!-- nullable; per-level override only -->
 | icon = String                            <!-- nullable; per-level override only -->
 | offered_sub_skills = List (,) of String  <!-- sub-skill ids unlocked at this level -->
@@ -30,7 +26,7 @@ Each level carries optional name / desc / icon overrides (rare — most levels i
 
 == Field notes ==
 * '''Primary key is <code>(skill_id, level)</code>'''.
-* '''<code>name_sid</code> / <code>desc_sid</code> / <code>icon</code>''' are sparse — populated only when the level overrides the parent skill's defaults. Most levels leave these null and inherit from <code>Skill.name_sid</code> / <code>Skill.desc_sid</code>.
+* '''<code>name_sid</code> / <code>desc_sid</code> / <code>icon</code>''' are sparse — populated only when the level overrides the parent skill's defaults. Most levels leave these null and inherit from the parent <code>Skill</code>. When a level ''does'' override, its resolved text for every language (English included) lives in the [[Template:TranslationDef|Translation]] table as <code>type='skill_level'</code> rows keyed by <code>target_id=<skill_id></code> + <code>variant=<level></code>.
 * '''<code>offered_sub_skills</code>''' is a Cargo <code>List (,) of String</code> — the sub-skill ids the player can pick from when reaching this level. <code>HOLDS</code>-friendly: <code>WHERE offered_sub_skills HOLDS 'sub_skill_offense'</code> to find every (skill, level) that offers a given perk. Empty for skills whose levels don't offer sub-skills (some pseudo skills, some campaign-only mechanics).
 * '''No <code>cost</code> column''' — unlike Law levels, skill levels don't charge a separate spend; they're earned through the hero's general level-up mechanic.
 
@@ -38,15 +34,13 @@ Each level carries optional name / desc / icon overrides (rare — most levels i
 * [[Template:SkillDef|Skill]] — joined on <code>skill_id = Skill.id</code> (N:1).
 * [[Template:SubSkillDef|SubSkill]] — joined on <code>offered_sub_skills HOLDS SubSkill.id</code>.
 * [[Template:BonusDef|<code>BonusDef</code>]] — joined on <code>parent_type='skill_level' AND parent_id = skill_id || '_L' || level</code>.
-* [[SkillLevelTranslationDef]] — joined on <code>(skill_id, level)</code>. Carries per-level name/desc overrides in 16 languages, populated only when the level has its own <code>name_sid</code> / <code>desc_sid</code>.
+* [[Template:TranslationDef|Translation]] — per-level name/desc overrides in every language (English included), joined on <code>skill_id = Translation.target_id AND level = Translation.variant WHERE Translation.type='skill_level'</code>; rows exist only for levels that override the parent skill's display fields.
 
 [[Category:Cargo Definitions]]
 </noinclude><includeonly>{{#cargo_store:_table=SkillLevel
 | skill_id = {{{skill_id|}}}
 | level = {{{level|}}}
-| name = {{{name|}}}
 | name_sid = {{{name_sid|}}}
-| description = {{{description|}}}
 | desc_sid = {{{desc_sid|}}}
 | icon = {{{icon|}}}
 | offered_sub_skills = {{{offered_sub_skills|}}}

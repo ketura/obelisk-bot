@@ -8,8 +8,6 @@ One row per extracted creature. Combat stats, resource costs, faction metadata, 
 | faction = String (allowed values=human,undead,dungeon,nature,demon,unfrozen,neutral)
 | tier = Integer
 | source_path = String
-| name = String
-| description = Wikitext
 | name_sid = String
 | desc_sid = String
 | base_sid = String
@@ -60,9 +58,7 @@ One row per extracted creature. Combat stats, resource costs, faction metadata, 
 | tier = Integer
 | source_path = String
 
-<!-- Localization references -->
-| name = String
-| description = Wikitext
+<!-- Localization references — display text lives in the Translation table, type='unit' -->
 | name_sid = String
 | desc_sid = String
 | base_sid = String                          <!-- this unit's base form, if it's an upgrade -->
@@ -120,10 +116,10 @@ One row per extracted creature. Combat stats, resource costs, faction metadata, 
 * '''<code>shared_abilities</code>''' lists name SIDs of the base/faction passives this unit has (e.g. <code>base_passive_melee_attack_name</code>). The actual passive text lives in shared tables (Phase 2). The bot ships these as references so the wiki display layer can render them by lookup instead of duplicating text on every unit page.
 * '''Resource cost columns are sparse.''' Most units have only <code>gold_cost</code>; tier-7s cost gold + a special resource. The <code>dust_cost</code> column reflects Olden Era's "dust" resource (analogous to mercury in HoMM3).
 * '''<code>creature_type</code> is derived''' from data-immunities tagged <code><class>_immunities</code> — <code>living_immunities</code> → <code>living</code>, etc. The unit's actual immunity tags live in <code>immunities</code>.
-* '''<code>name_sid</code> / <code>desc_sid</code>''' are the join keys to <code>UnitTranslation</code>.
+* '''<code>name_sid</code> / <code>desc_sid</code>''' are the source L10n SIDs, surfaced for traceability only. They are not the translation lookup path — display text is joined from the [[Template:TranslationDef|Translation]] table on <code>id</code>.
 
 == Related tables ==
-* [[UnitTranslation]] — joined on <code>name_sid</code> (1:1).
+* [[Template:TranslationDef|Translation]] — display text in every language (English included), joined on <code>id = Translation.target_id WHERE Translation.type='unit' AND Translation.language='{{{lang|en}}}'</code> (1:N, one row per language).
 * [[Template:UnitAbilityDef|UnitAbility]] and its splinters — joined on <code>unit_id = id</code> (1:N).
 
 [[Category:Cargo Definitions]]
@@ -133,8 +129,6 @@ One row per extracted creature. Combat stats, resource costs, faction metadata, 
 | faction = {{{faction|}}}
 | tier = {{{tier|}}}
 | source_path = {{{source_path|}}}
-| name = {{{name|}}}
-| description = {{{description|}}}
 | name_sid = {{{name_sid|}}}
 | desc_sid = {{{desc_sid|}}}
 | base_sid = {{{base_sid|}}}

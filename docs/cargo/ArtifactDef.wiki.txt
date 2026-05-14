@@ -5,21 +5,21 @@ The source folder is <code>DB/items/items/</code> — using the JSON's "item" sp
 
 The bot emits each artifact at <code>Data:Artifact/<id></code> carrying:
 
-# <code><nowiki>{{ArtifactDef | id=… | name=… | description=… | slot=… | rarity=… | …}}</nowiki></code> — main row.
-# <code><nowiki>{{TranslationDef | type=artifact | target_id=<id> | …}}</nowiki></code> — name + description i18n.
+# <code><nowiki>{{ArtifactDef | id=… | slot=… | rarity=… | …}}</nowiki></code> — main structural row.
+# N × <code><nowiki>{{TranslationDef | type=artifact | target_id=<id> | language=… | name=… | description=… }}</nowiki></code> — name + description, one row per language.
+# N × <code><nowiki>{{TranslationDef | type=artifact_upgrade | target_id=<id> | language=… | description=… }}</nowiki></code> — upgrade text (in the <code>description</code> column), one row per language, when an <code>upgrade_description_sid</code> exists.
+# N × <code><nowiki>{{TranslationDef | type=artifact_narrative | target_id=<id> | language=… | description=… }}</nowiki></code> — narrative/lore text (in the <code>description</code> column), one row per language, when a <code>narrative_description_sid</code> exists.
 # N × <code><nowiki>{{BonusDef | parent_type=artifact | parent_id=<id> | …}}</nowiki></code> — bonuses, in the unified Bonus table.
+
+The artifact's three translatable text fields each get their own <code>type</code> discriminator rather than extra columns on the shared Translation table — the same approach Hero uses for its motto.
 
 == Schema ==
 {{#cargo_declare:_table=Artifact
 | id = String
-| name = String
-| description = Wikitext
 | name_sid = String
 | description_sid = String
 | upgrade_description_sid = String
-| upgrade_description = Wikitext
 | narrative_description_sid = String
-| narrative_description = Wikitext
 | icon = String
 | slot = String
 | rarity = String (allowed values=common,rare,epic,legendary)
@@ -39,19 +39,15 @@ The bot emits each artifact at <code>Data:Artifact/<id></code> carrying:
 == Related tables ==
 * [[Template:ItemSetDef|ItemSet]] — joined on <code>Artifact.artifact_set_id = ItemSet.id</code>.
 * [[Template:BonusDef|Bonus]] — joined on <code>Artifact.id = Bonus.parent_id</code>, filtered by <code>Bonus.parent_type='artifact'</code>.
-* [[Template:TranslationDef|Translation]] — one row per artifact with <code>type=artifact</code>, joined on <code>Artifact.id = Translation.target_id</code>.
+* [[Template:TranslationDef|Translation]] — display text in every language (English included), joined on <code>Artifact.id = Translation.target_id</code> with <code>Translation.type IN ('artifact', 'artifact_upgrade', 'artifact_narrative')</code> and the desired <code>language</code> filter.
 
 [[Category:Cargo Definitions]]
 </noinclude><includeonly>{{#cargo_store:_table=Artifact
 | id = {{{id|}}}
-| name = {{{name|}}}
-| description = {{{description|}}}
 | name_sid = {{{name_sid|}}}
 | description_sid = {{{description_sid|}}}
 | upgrade_description_sid = {{{upgrade_description_sid|}}}
-| upgrade_description = {{{upgrade_description|}}}
 | narrative_description_sid = {{{narrative_description_sid|}}}
-| narrative_description = {{{narrative_description|}}}
 | icon = {{{icon|}}}
 | slot = {{{slot|}}}
 | rarity = {{{rarity|}}}

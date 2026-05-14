@@ -3,13 +3,14 @@ One row per spell. ~137 in the 2026-05-03 corpus across 5 schools (day, night, p
 
 The bot emits each spell at <code>Data:Spell/<id></code> carrying:
 
-# <code><nowiki>{{SpellDef | id=… | name=… | school=… | rank=… | …}}</nowiki></code> — main row with the split learn-cost columns inline.
-# 4 × <code><nowiki>{{SpellRankDef | spell_id=<id> | level=<1-4> | …}}</nowiki></code> paired with 4 × <code><nowiki>{{SpellRankTranslationDef | spell_id=<id> | level=<1-4> | …}}</nowiki></code> — one pair per mastery level (1=no skill, 2=basic, 3=advanced, 4=expert). Spells use the dedicated SpellRankTranslation table instead of the unified Translation (per D-030 revised) because the per-rank shape carries 3 localizable fields (name + desc + bonus_description) rather than the standard 2.
+# <code><nowiki>{{SpellDef | id=… | school=… | rank=… | …}}</nowiki></code> — main row with the split learn-cost columns inline.
+# N × <code><nowiki>{{TranslationDef | type=spell | target_id=<id> | language=… | name=… }}</nowiki></code> — spell name, one row per language.
+# 4 × <code><nowiki>{{SpellRankDef | spell_id=<id> | level=<1-4> | …}}</nowiki></code> — one per mastery level (1=no skill, 2=basic, 3=advanced, 4=expert).
+# For each rank, N × <code><nowiki>{{TranslationDef | type=spell_rank | target_id=<id> | variant=<level> | language=… | description=… | bonus_description=… }}</nowiki></code> — the per-rank localizable text. <code>bonus_description</code> is the one column on the shared Translation table that exists specifically for spell ranks.
 
 == Schema ==
 {{#cargo_declare:_table=Spell
 | id = String
-| name = String
 | name_sid = String
 | school = String (allowed values=day,night,primal,space,neutral)
 | rank = Integer
@@ -34,8 +35,7 @@ The bot emits each spell at <code>Data:Spell/<id></code> carrying:
 <pre><nowiki>
 {{SpellDef
 | id = String
-| name = String
-| name_sid = String
+| name_sid = String              <!-- display name lives in the Translation table, type='spell' -->
 
 | school = String (allowed values=day,night,primal,space,neutral)
 | rank = Integer
@@ -76,11 +76,12 @@ The bot emits each spell at <code>Data:Spell/<id></code> carrying:
 * '''<code>used_on_map</code>''' distinguishes battle vs world spells. <code>worldMagic</code> and <code>battleMagic</code> sub-trees are not extracted as Cargo columns yet — they describe the in-game effect mechanics in detail; future work if a wiki need surfaces.
 * '''Special magics''' (<code>is_special_magic=true</code>) point back at the base spell via <code>normal_magic_sid</code>. These are upgraded variants unlocked by certain heroes' specializations.
 * '''<code>excaption_in_tooltip_sid</code>''' — source field name preserves the typo (<code>excaption</code> instead of <code>exception</code>); it points at SIDs like <code>description_effect_undead_embodiment_construct_immunities</code> ("Does not affect Undead, Embodiments, or Constructs"). The bot passes the source name through unchanged.
-* '''No <code>desc_sid</code> here.''' Spell descriptions vary by mastery level and live on the SpellRank rows.
+* '''No <code>desc_sid</code> here.''' Spell descriptions vary by mastery level and live on the SpellRank rows; their resolved text is in the Translation table under <code>type='spell_rank'</code>.
+* '''Display name''' for every language (English included) lives in the [[Template:TranslationDef|Translation]] table, <code>type='spell'</code>.
 
 == Related tables ==
 * [[Template:SpellRankDef|SpellRank]] — joined on <code>id = spell_id</code> (1:N, 4 rows per spell).
-* [[SpellRankTranslationDef]] — joined on <code>id = spell_id</code> (1:N, 4 rows per spell). Carries the i18n payload for spell name + per-rank desc + per-rank bonus_description.
+* [[Template:TranslationDef|Translation]] — the spell name (<code>type='spell'</code>) and per-rank description + bonus_description (<code>type='spell_rank'</code>, <code>variant=<level></code>) in every language (English included), keyed on <code>target_id=id</code>.
 * <code>Hero.start_magics</code> — references spell ids via the comma-joined list column.
 
 == Notes ==
@@ -88,7 +89,6 @@ The bot emits each spell at <code>Data:Spell/<id></code> carrying:
 [[Category:Cargo Definitions]]
 </noinclude><includeonly>{{#cargo_store:_table=Spell
 | id = {{{id|}}}
-| name = {{{name|}}}
 | name_sid = {{{name_sid|}}}
 | school = {{{school|}}}
 | rank = {{{rank|}}}

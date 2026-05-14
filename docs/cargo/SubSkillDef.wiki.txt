@@ -9,7 +9,7 @@ Sub-skills are inlined on their parent skill's page (<code>Data:Skill/<parent_sk
 Each sub-skill contributes:
 
 # <code><nowiki>{{SubSkillDef | id=… | parent_skill_id=… | …}}</nowiki></code>
-# <code><nowiki>{{TranslationDef | type=sub_skill | target_id=<id> | …}}</nowiki></code>
+# N × <code><nowiki>{{TranslationDef | type=sub_skill | target_id=<id> | language=… | name=… | description=… }}</nowiki></code> — one row per language
 # M × <code><nowiki>{{BonusDef | parent_type=sub_skill | parent_id=<id> | … }}</nowiki></code>
 
 == Schema ==
@@ -17,9 +17,7 @@ Each sub-skill contributes:
 | id = String
 | variant = String
 | parent_skill_id = String
-| name = String
 | name_sid = String
-| description = Wikitext
 | desc_sid = String
 | icon = String
 | source_path = String
@@ -30,9 +28,8 @@ Each sub-skill contributes:
 | id = String
 | variant = String              <!-- production / arena / campaign / test -->
 | parent_skill_id = String      <!-- nullable; null for orphans -->
-| name = String                 <!-- resolved English -->
+<!-- Localization references — display text lives in the Translation table, type='sub_skill' -->
 | name_sid = String
-| description = Wikitext               <!-- resolved English; nullable -->
 | desc_sid = String             <!-- nullable -->
 | icon = String                 <!-- nullable -->
 | source_path = String
@@ -43,22 +40,20 @@ Each sub-skill contributes:
 * '''<code>id</code>''' is the source JSON id (e.g. <code>sub_skill_offense</code>, <code>arena_sub_skill_offense_old</code>, <code>sub_skill_marchOfWar</code>).
 * '''<code>variant</code>''' distinguishes production / arena / campaign / test variants. Most analytical queries should <code>WHERE variant = 'production'</code>.
 * '''<code>parent_skill_id</code>''' is derived: the id of the [[Template:SkillDef|Skill]] whose <code><nowiki>{{SkillLevelDef}}</nowiki></code> rows include this sub-skill in their <code>offered_sub_skills</code> list. NULL when no skill in the corpus references this sub-skill — those 77 orphans live on the <code>Data:Skill/_orphan_sub_skills</code> catch-all page (test entries + arena legacy <code>*_old</code>).
-* '''<code>name_sid</code> / <code>desc_sid</code>''' point at the L10n entries; <code>name</code> / <code>desc</code> are the resolved English mirrors.
+* '''<code>name_sid</code> / <code>desc_sid</code>''' point at the L10n entries, surfaced for traceability. Display name / description for every language (English included) live in the [[Template:TranslationDef|Translation]] table, <code>type='sub_skill'</code>.
 
 == Related tables ==
 * [[Template:SkillDef|Skill]] — joined on <code>parent_skill_id = Skill.id</code> (N:1).
 * [[Template:SkillLevelDef|SkillLevel]] — joined on <code>SkillLevel.offered_sub_skills HOLDS SubSkill.id</code> (N:M; a sub-skill is typically offered at exactly one (skill, level) but the relation is general).
 * [[Template:BonusDef|<code>BonusDef</code>]] — joined on <code>parent_type='sub_skill' AND parent_id = SubSkill.id</code>.
-* [[Template:TranslationDef|<code>TranslationDef</code>]] — one row per sub-skill with <code>type=sub_skill</code>, <code>target_id=id</code>.
+* [[Template:TranslationDef|Translation]] — display text in every language (English included), joined on <code>id = Translation.target_id WHERE Translation.type='sub_skill' AND Translation.language='{{{lang|en}}}'</code> (1:N, one row per language).
 
 [[Category:Cargo Definitions]]
 </noinclude><includeonly>{{#cargo_store:_table=SubSkill
 | id = {{{id|}}}
 | variant = {{{variant|}}}
 | parent_skill_id = {{{parent_skill_id|}}}
-| name = {{{name|}}}
 | name_sid = {{{name_sid|}}}
-| description = {{{description|}}}
 | desc_sid = {{{desc_sid|}}}
 | icon = {{{icon|}}}
 | source_path = {{{source_path|}}}

@@ -4,18 +4,17 @@ One row per game difficulty setting. 5 entries in 2026-05-05: Easy / Normal / Ha
 Two source-data quirks worth flagging up front:
 
 * The source <code>nameSid</code> values (<code>EasyDifficultySid</code>, <code>NormalDifficultySid</code>, …) are ''not'' L10n entries — they don't resolve in any <code>Lang/<locale>/</code> file. We store them on the row for fidelity, but the canonical display name is the <code>id</code> itself.
-* The source <code>descriptionSid</code> field carries literal English text ("This is an Easy difficulty setting."), not an L10n key. We store it as a plain <code>description</code> string column.
+* The source <code>descriptionSid</code> field carries literal English text ("This is an Easy difficulty setting."), not an L10n key.
 
-Because of those, this table doesn't carry a companion <code><nowiki>{{TranslationDef}}</nowiki></code> row — the source data ships in English only.
+Because the source ships English-only, this table's [[Template:TranslationDef|Translation]] rows exist only for <code>language=en</code> — a query in any other language correctly returns nothing. The lookup path stays uniform with every other entity even though there's just the one language.
 
 == Page layout ==
-<code>Data:Difficulty/<id></code> carries a single <code><nowiki>{{DifficultyDef}}</nowiki></code> row.
+<code>Data:Difficulty/<id></code> carries a single <code><nowiki>{{DifficultyDef}}</nowiki></code> row followed by one <code><nowiki>{{TranslationDef | type=difficulty | language=en}}</nowiki></code> row.
 
 == Schema ==
 {{#cargo_declare:_table=Difficulty
 | id = String
 | name_sid = String
-| description = Wikitext
 | neutral_power_multiplier = Float
 | player_gold = Integer
 | player_wood = Integer
@@ -38,7 +37,6 @@ Because of those, this table doesn't carry a companion <code><nowiki>{{Translati
 {{DifficultyDef
 | id = String                      <!-- Easy / Normal / Hard / Expert / Impossible -->
 | name_sid = String                <!-- nullable; not actually in L10n corpus -->
-| description = Wikitext           <!-- literal English from source descriptionSid -->
 | neutral_power_multiplier = Float <!-- 0.5 / 0.75 / 1.0 / 1.5 / 2.0 -->
 | player_gold = Integer
 | player_wood = Integer
@@ -65,13 +63,13 @@ Because of those, this table doesn't carry a companion <code><nowiki>{{Translati
 * '''Asymmetry''': on Easy, the player starts with 3× the resources the AI does; this flips on Hard+, with the Impossible AI getting 5× the player's gold. That's the ''primary'' difficulty mechanism — <code>neutral_power_multiplier</code> only modulates map encounters.
 
 == Related tables ==
+* [[Template:TranslationDef|Translation]] — the difficulty's description, joined on <code>id = Translation.target_id WHERE Translation.type='difficulty' AND Translation.language='en'</code> (English-only; the source ships no other languages).
 * [[Template:EntryDef|<code>Resource</code>]] — the seven per-side <code><player|ai>_<resource></code> columns mirror the resource ids on the Resource Entry rows (gold / wood / ore / gemstones / crystals / mercury / dust).
 
 [[Category:Cargo Definitions]]
 </noinclude><includeonly>{{#cargo_store:_table=Difficulty
 | id = {{{id|}}}
 | name_sid = {{{name_sid|}}}
-| description = {{{description|}}}
 | neutral_power_multiplier = {{{neutral_power_multiplier|}}}
 | player_gold = {{{player_gold|}}}
 | player_wood = {{{player_wood|}}}

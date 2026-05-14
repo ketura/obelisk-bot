@@ -4,17 +4,14 @@ One row per hero (~177 in the 2026-05-03 corpus: 108 faction + 46 campaign + 21 
 
 The bot emits these per-hero blocks at <code>Data:Hero/<id></code>:
 
-# <code><nowiki>{{HeroDef | id=… | name=… | motto=… | desc=… | start_skills=… | start_magics=… | …}}</nowiki></code> — main row. <code>start_skills</code> and <code>start_magics</code> are comma-joined SID lists inline on this row (no side tables for them).
-# <code><nowiki>{{TranslationDef | type=hero | target_id=<id> | …}}</nowiki></code> — name/desc translation (per D-026).
-# <code><nowiki>{{TranslationDef | type=hero_motto | target_id=<id> | …}}</nowiki></code> — motto translation (separate row, kept off the schema-specialization path; per D-027).
+# <code><nowiki>{{HeroDef | id=… | start_skills=… | start_magics=… | …}}</nowiki></code> — main row. <code>start_skills</code> and <code>start_magics</code> are comma-joined SID lists inline on this row (no side tables for them).
+# <code><nowiki>{{TranslationDef | type=hero | target_id=<id> | language=… | name=… | description=… }}</nowiki></code> × N — name/description, one row per language.
+# <code><nowiki>{{TranslationDef | type=hero_motto | target_id=<id> | language=… | description=… }}</nowiki></code> × N — motto, a separate translation key, one row per language (motto text goes in the <code>description</code> column since it may carry markup).
 # <code><nowiki>{{HeroStartSquadDef | …}}</nowiki></code> × N — one per starting squad slot (primary + alt collapsed via <code>variant</code> discriminator).
 
 == Schema ==
 {{#cargo_declare:_table=Hero
 | id = String
-| name = String
-| motto = Wikitext
-| description = Wikitext
 | name_sid = String
 | motto_sid = String
 | desc_sid = String
@@ -59,9 +56,9 @@ The bot emits these per-hero blocks at <code>Data:Hero/<id></code>:
 <pre><nowiki>
 {{HeroDef
 | id = String
-| name = String
-| motto = Wikitext
-| description = Wikitext
+
+<!-- Localization references — display text lives in the Translation table:
+     type='hero' carries name+description, type='hero_motto' carries the motto -->
 | name_sid = String
 | motto_sid = String
 | desc_sid = String
@@ -84,8 +81,8 @@ The bot emits these per-hero blocks at <code>Data:Hero/<id></code>:
 | start_magics = List (,) of String        <!-- joins future Spell.id -->
 
 <!-- Note: spell level / isLearned are dropped (constant in the
-     2026-05-03 corpus per D-027 revised). Skill level is preserved
-     because 8/208 entries diverge from the default of 1. -->
+     2026-05-03 corpus). Skill level is preserved because 8/208
+     entries diverge from the default of 1. -->
 
 
 <!-- Class-default override fields. Sparse: absent means inherit from
@@ -142,8 +139,8 @@ For campaign/tutorial heroes: ~3-5 columns are typically present (empirically: <
 
 == Field notes ==
 * '''<code>id</code>''' is the hero's source JSON id (e.g. <code>human_hero_1</code>, <code>campaign_M10_hero_demon_1</code>).
-* '''<code>name_sid</code>/<code>motto_sid</code>/<code>desc_sid</code>''' carry the source SID for traceability and as the join key to the Translation rows. Faction heroes use implicit conventions (<code><id></code> / <code><id>_motto</code> / <code><id>_description</code>); campaign heroes set them explicitly in source JSON.
-* '''<code>name</code>/<code>motto</code>/<code>desc</code>''' carry the resolved English text inline. Translations live on the two <code>TranslationDef</code> rows (one for name+desc, one for motto).
+* '''<code>name_sid</code>/<code>motto_sid</code>/<code>desc_sid</code>''' carry the source SID for traceability only. Faction heroes use implicit conventions (<code><id></code> / <code><id>_motto</code> / <code><id>_description</code>); campaign heroes set them explicitly in source JSON.
+* '''Display name / motto / description''' for every language (English included) live in the [[Template:TranslationDef|Translation]] table — <code>type='hero'</code> rows carry name + description, <code>type='hero_motto'</code> rows carry the motto. Both keyed on <code>target_id = Hero.id</code>.
 * '''<code>class_id</code>''' is <code><class_type>_<faction></code> — matches <code>HeroClass.id</code>.
 * '''<code>faction</code>/<code>class_type</code>''' are denormalized from the class so that "all human heroes" / "all might heroes" filters don't need a join.
 * '''<code>specialization_id</code>''' points at a row in <code>HeroSpecializationDef</code> (one specialization per hero, 1:1 ratio). Schema for that table comes in a follow-up.
@@ -153,17 +150,14 @@ For campaign/tutorial heroes: ~3-5 columns are typically present (empirically: <
 * [[Template:HeroStartSquadDef|HeroStartSquad]] — joined on <code>hero_id = id</code> (1:N). Each row is one slot in primary or alt starting army.
 * <code>SkillDef</code> (future) — joined on <code>start_skills</code> LIKE <code>%<sid>%</code> or via Cargo's <code>HOLDS</code> operator on the List column.
 * <code>SpellDef</code> (future) — same join pattern via <code>start_magics</code>.
-'' [[Template:HeroSpecializationDef|HeroSpecialization]] — joined on <code>specialization_id = id</code> (N:1). The hero's unique passive. ''(Schema lands in a follow-up.)*
-* [[Template:TranslationDef|<code>TranslationDef</code>]] — two rows per hero (<code>type=hero</code> and <code>type=hero_motto</code>).
+* [[Template:HeroSpecializationDef|HeroSpecialization]] — joined on <code>specialization_id = id</code> (N:1). The hero's unique passive.
+* [[Template:TranslationDef|Translation]] — display text in every language (English included), joined on <code>id = Translation.target_id</code> with <code>Translation.type IN ('hero', 'hero_motto')</code> and the desired <code>language</code> filter (1:N, two keys × one row per language).
 
 == Notes ==
 
 [[Category:Cargo Definitions]]
 </noinclude><includeonly>{{#cargo_store:_table=Hero
 | id = {{{id|}}}
-| name = {{{name|}}}
-| motto = {{{motto|}}}
-| description = {{{description|}}}
 | name_sid = {{{name_sid|}}}
 | motto_sid = {{{motto_sid|}}}
 | desc_sid = {{{desc_sid|}}}

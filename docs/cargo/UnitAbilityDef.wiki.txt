@@ -10,8 +10,6 @@ The wiki-side templates (<code><nowiki>{{ActiveAbility}}</nowiki></code>, <code>
 | ability_type = String (allowed values=active,passive,conditional_passive,global_passive,aura,stat_passive,buff,debuff,selfbuff,additionbuff,copy_buff,curse,blood,other)
 | ordinal = Integer
 | variant = String (allowed values=base,advanced,upg,upg_alt)
-| name = String
-| description = Wikitext
 | name_sid = String
 | desc_sid = String
 }}
@@ -23,8 +21,7 @@ The wiki-side templates (<code><nowiki>{{ActiveAbility}}</nowiki></code>, <code>
 | ability_type = String (allowed values=active,passive,conditional_passive,global_passive,aura,stat_passive,buff,debuff,selfbuff,additionbuff,copy_buff,curse,blood,other)
 | ordinal = Integer
 | variant = String (allowed values=base,advanced,upg,upg_alt)
-| name = String
-| description = Wikitext
+<!-- Localization references — display text lives in the Translation table, type='unit_ability' -->
 | name_sid = String
 | desc_sid = String
 }}
@@ -37,7 +34,7 @@ The wiki-side templates (<code><nowiki>{{ActiveAbility}}</nowiki></code>, <code>
 ** <code>passive</code> / <code>conditional_passive</code> / <code>global_passive</code> / <code>aura</code> / <code>stat_passive</code> — each joined to its like-named splinter.
 ** <code>buff</code> / <code>debuff</code> / <code>selfbuff</code> / <code>additionbuff</code> / <code>copy_buff</code> / <code>curse</code> / <code>blood</code> / <code>other</code> — discovered via SID family but have no unit-side splinter. Their payload lives in a future <code>Buff</code> table keyed on <code>name_sid</code>.
 * '''<code>variant</code>''' is <code>null</code> for the base/default form, <code>"advanced"</code> / <code>"upg"</code> / <code>"upg_alt"</code> for the appropriate variant SID family. Two rows with the same <code>(unit_id, ability_type, ordinal)</code> but different <code>variant</code> represent the same ability slot in different unit tiers.
-* '''<code>name</code> / <code>desc</code>''' are the English defaults. Translations are in <code>UnitAbilityTranslation</code>, joined on <code>ability_id</code>.
+* '''Display name / description''' for every language (English included) live in the [[Template:TranslationDef|Translation]] table, <code>type='unit_ability'</code>, joined on <code>ability_id = Translation.target_id</code>. <code>name_sid</code>/<code>desc_sid</code> stay here for traceability only.
 
 == Related tables ==
 * [[Template:UnitAbilityActiveDef|UnitAbilityActive]] — splinter for <code>active</code>.
@@ -46,7 +43,7 @@ The wiki-side templates (<code><nowiki>{{ActiveAbility}}</nowiki></code>, <code>
 * [[Template:UnitAbilityGlobalDef|UnitAbilityGlobal]] — splinter for <code>global_passive</code>.
 * [[Template:UnitAbilityAuraDef|UnitAbilityAura]] — splinter for <code>aura</code>.
 * [[Template:UnitAbilityStatPassiveDef|UnitAbilityStatPassive]] — splinter for <code>stat_passive</code>.
-* [[UnitAbilityTranslation]] — i18n companion (1:1).
+* [[Template:TranslationDef|Translation]] — display text in every language (English included), joined on <code>ability_id = Translation.target_id WHERE Translation.type='unit_ability' AND Translation.language='{{{lang|en}}}'</code> (1:N, one row per language).
 * [[Template:UnitDef|Unit]] — parent on <code>unit_id = id</code> (N:1).
 
 == Notes ==
@@ -58,8 +55,6 @@ The wiki-side templates (<code><nowiki>{{ActiveAbility}}</nowiki></code>, <code>
 | ability_type = {{{ability_type|}}}
 | ordinal = {{{ordinal|}}}
 | variant = {{{variant|}}}
-| name = {{{name|}}}
-| description = {{{description|}}}
 | name_sid = {{{name_sid|}}}
 | desc_sid = {{{desc_sid|}}}
 }}

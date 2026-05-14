@@ -1,5 +1,5 @@
 <noinclude>
-A unified Cargo table for bonus effects across multiple parent entity types. Per D-031: hero specializations, hero sub-classes, artifacts, item-set tiers, and faction laws all share one Bonus table with <code>parent_type</code> + <code>parent_id</code> discriminator columns.
+A unified Cargo table for bonus effects across multiple parent entity types. Hero specializations, hero sub-classes, artifacts, item-set tiers, and faction laws all share one Bonus table with <code>parent_type</code> + <code>parent_id</code> discriminator columns.
 
 The bot emits each row inline on the parent entity's wiki page. There are no individual <code>Data:Bonus/…</code> pages.
 

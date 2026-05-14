@@ -7,15 +7,13 @@ The specialization carries identity (name, desc, icon) plus a list of structured
 == Page layout ==
 <code>Data:HeroSpecialization/<id></code> carries:
 
-# <code><nowiki>{{HeroSpecializationDef | id=… | name=… | desc=… | icon=… | …}}</nowiki></code>
-# <code><nowiki>{{TranslationDef | type=hero_specialization | target_id=<id> | …}}</nowiki></code>
+# <code><nowiki>{{HeroSpecializationDef | id=… | icon=… | name_sid=… | desc_sid=… | …}}</nowiki></code>
+# N × <code><nowiki>{{TranslationDef | type=hero_specialization | target_id=<id> | language=… | …}}</nowiki></code> — one row per language
 # N × <code><nowiki>{{HeroSpecializationBonus | spec_id=<id> | ordinal=N | …}}</nowiki></code> (1367 total bonus rows across all 126 specs)
 
 == Schema ==
 {{#cargo_declare:_table=HeroSpecialization
 | id = String
-| name = String
-| description = Wikitext
 | name_sid = String
 | desc_sid = String
 | icon = String
@@ -25,33 +23,30 @@ The specialization carries identity (name, desc, icon) plus a list of structured
 <pre><nowiki>
 {{HeroSpecializationDef
 | id = String
-| name = String
-| description = Wikitext
+| icon = String
+<!-- Localization references — display text lives in the Translation table, type='hero_specialization' -->
 | name_sid = String
 | desc_sid = String
-| icon = String
 | source_path = String
 }}
 </nowiki></pre>
 
 == Field notes ==
 * '''<code>id</code>''' is the source JSON id (e.g. <code>human_hero_1_specialization</code>, <code>campaign_hero_4_specialization</code>). The <code>_specialization</code> suffix is preserved.
-* '''<code>name_sid</code> / <code>desc_sid</code>''' point at the L10n entries (e.g. <code>human_hero_1_spec_name</code> / <code>human_hero_1_spec_description</code>). Description text is heavy with <code>{0}</code>/<code>{1}</code> placeholders for stat values; the resolver substitutes via the standard pipeline before storing.
-* '''<code>name</code> / <code>desc</code>''' carry the resolved English text inline. Translations live on the <code><nowiki>{{TranslationDef | type=hero_specialization}}</nowiki></code> row.
-* '''No <code>hero_id</code> back-reference.''' The Hero → HeroSpecialization direction is sufficient (forward join via <code>Hero.specialization_id = HeroSpecialization.id</code>). Reverse queries — "which hero has this spec" — work via the same join. Per D-028.
+* '''<code>name_sid</code> / <code>desc_sid</code>''' point at the L10n entries (e.g. <code>human_hero_1_spec_name</code> / <code>human_hero_1_spec_description</code>), surfaced for traceability. Description text is heavy with <code>{0}</code>/<code>{1}</code> placeholders for stat values; the resolver substitutes via the standard pipeline before storing the translation.
+* '''Display name / description''' for every language (English included) live in the [[Template:TranslationDef|Translation]] table, <code>type='hero_specialization'</code>.
+* '''No <code>hero_id</code> back-reference.''' The Hero → HeroSpecialization direction is sufficient (forward join via <code>Hero.specialization_id = HeroSpecialization.id</code>). Reverse queries — "which hero has this spec" — work via the same join.
 
 == Related tables ==
 * [[Template:HeroDef|Hero]] — joined on <code>id = Hero.specialization_id</code> (1:1 in practice; the schema permits N:1 in case a future patch shares specs across heroes).
 * [[HeroSpecializationBonus]] — joined on <code>id = spec_id</code> (1:N).
-* [[Template:TranslationDef|<code>TranslationDef</code>]] — one row per spec with <code>type=hero_specialization</code>, <code>target_id=id</code>.
+* [[Template:TranslationDef|Translation]] — display text in every language (English included), joined on <code>id = Translation.target_id WHERE Translation.type='hero_specialization' AND Translation.language='{{{lang|en}}}'</code> (1:N, one row per language).
 
 == Notes ==
 
 [[Category:Cargo Definitions]]
 </noinclude><includeonly>{{#cargo_store:_table=HeroSpecialization
 | id = {{{id|}}}
-| name = {{{name|}}}
-| description = {{{description|}}}
 | name_sid = {{{name_sid|}}}
 | desc_sid = {{{desc_sid|}}}
 | icon = {{{icon|}}}

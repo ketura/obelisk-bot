@@ -1,7 +1,7 @@
 <noinclude>
 One row per adventure-map structure pulled from <code>DB/objects_logic/</code> — '''roughly 150 rows''' in the 2026-05-05 corpus across ~22 categories (resource piles, mines, dwellings, banks, chests, taverns, markets, portals, shrines, uniques, etc.).
 
-Per D-035: the source data is heterogeneous (chests carry <code>variants</code> loot tables, hires carry <code>unitsData</code> + <code>bonuses</code>, mines carry
+The source data is heterogeneous (chests carry <code>variants</code> loot tables, hires carry <code>unitsData</code> + <code>bonuses</code>, mines carry
 <code>resArr</code>, etc.) but most of that variance is deferred. This pass
 captures the universal fields players care about — name, description, icon, basic combat / economy stats — plus a <code>source_path</code> pointer so editors can dig into the raw JSON for specifics the wiki doesn't yet surface.
 
@@ -12,18 +12,16 @@ treatment.
 == Page layout ==
 <code>Data:MapObject/<id></code> carries:
 
-# <code><nowiki>{{MapObjectDef | id=… | category=… | name=… | desc=… | …}}</nowiki></code>
-# <code><nowiki>{{TranslationDef | type=map_object | target_id=<id> | <lang>_name=… | <lang>_desc=… | …}}</nowiki></code>
+# <code><nowiki>{{MapObjectDef | id=… | category=… | …}}</nowiki></code>
+# N × <code><nowiki>{{TranslationDef | type=map_object | target_id=<id> | language=… | name=… | description=… }}</nowiki></code> — name+description, one row per language
+# N × <code><nowiki>{{TranslationDef | type=map_object_narrative | target_id=<id> | language=… | description=… }}</nowiki></code> — narrative text (in the <code>description</code> column), one row per language, when a <code>narrative_desc_sid</code> exists
 
 == Schema ==
 {{#cargo_declare:_table=MapObject
 | id = String
 | category = String
-| name = String
 | name_sid = String
-| description = Wikitext
 | desc_sid = String
-| narrative_desc = Wikitext
 | narrative_desc_sid = String
 | goods_value = Integer
 | ai_value = Integer
@@ -43,12 +41,10 @@ treatment.
 | id = String
 | category = String              <!-- res, res_mines, magic_mines, hires, chests, event_banks, taverns, markets, item_markets, res_trade_labs, unit_res_trade_labs, outposts, garrisons, portals, sacrificial_shrine, fickle_shrines, mirages, insaras_eye, eternal_dragon, pocket_dimensions, chimerologist, prisons -->
 
-<!-- Identity / display -->
-| name = String
+<!-- Localization references — display text lives in the Translation table:
+     type='map_object' carries name+description, type='map_object_narrative' carries narrative_desc -->
 | name_sid = String
-| description = Wikitext
 | desc_sid = String
-| narrative_desc = Wikitext
 | narrative_desc_sid = String
 
 <!-- Core scalars (sparse — only populated when present in source) -->
@@ -74,7 +70,7 @@ treatment.
 == Field notes ==
 * '''<code>id</code>''' is the source JSON id (e.g. <code>mine_gold</code>, <code>barracks_human_3</code>, <code>celestial_sphere</code>, <code>tavern</code>, <code>portal_1</code>). No synthesis — the source ids are already globally unique.
 * '''<code>category</code>''' is the source folder name under <code>DB/objects_logic/</code>. Used for filtering (e.g. "all dwellings" → <code>WHERE category = 'hires'</code>).
-* '''<code>name_sid</code> / <code>desc_sid</code> / <code>narrative_desc_sid</code>''' follow the convention <code><id>_name</code> / <code><id>_description</code> / <code><id>_narrativeDescription</code> against <code>Lang/<locale>/texts/mapObjects.json</code>. ~94 of the ~150 rows have player-facing names; the rest (e.g. <code>tavern</code>, <code>outposts</code>, single-instance specials) get NULL name fields and rely on category for identification.
+* '''<code>name_sid</code> / <code>desc_sid</code> / <code>narrative_desc_sid</code>''' follow the convention <code><id>_name</code> / <code><id>_description</code> / <code><id>_narrativeDescription</code> against <code>Lang/<locale>/texts/mapObjects.json</code>, surfaced for traceability. Display text for every language (English included) lives in the [[Template:TranslationDef|Translation]] table. ~94 of the ~150 rows have player-facing names; the rest (e.g. <code>tavern</code>, <code>outposts</code>, single-instance specials) have no <code>name_sid</code>, emit no <code>type='map_object'</code> Translation row, and rely on category for identification.
 * '''<code>goods_value</code>''' is the in-source AI/economy weight (the "value" of taking this object). Universal — present on virtually every entry.
 * '''<code>ai_value</code>''' / '''<code>custom_guard_value</code>''' appear on chests, hires, mines, resources — used by AI threat assessment.
 * '''<code>guard_units</code>''' is the comma-joined list of <code><sid>:<amount></code> pairs (e.g. <code>esquire:2,crossbowman:2</code>). NULL when source has empty <code>guardUnits</code>.
@@ -96,7 +92,7 @@ are out of scope for this pass. They'd each warrant their own side table (<code>
 The <code>source_path</code> column on every row points editors at the source JSON file for those specifics until structured wiki coverage catches up.
 
 == Related tables ==
-* [[Template:TranslationDef|<code>TranslationDef</code>]] — one row per MapObject with <code>type='map_object'</code>, <code>target_id=id</code>.
+* [[Template:TranslationDef|Translation]] — display text in every language (English included), joined on <code>id = Translation.target_id</code> with <code>Translation.type IN ('map_object', 'map_object_narrative')</code> and the desired <code>language</code> filter.
 * [[Template:BuildingDef|Building]] — sibling table covering city-buildings (<code>DB/objects_logic/cities/</code>).
 * [[Template:ArtifactDef|Artifact]] — canonical artifact data; map placements in <code>DB/objects_logic/items/</code> reference these by id.
 * [[Template:UnitDef|Unit]] — <code>guard_units</code> entries reference Unit ids.
@@ -105,11 +101,8 @@ The <code>source_path</code> column on every row points editors at the source JS
 </noinclude><includeonly>{{#cargo_store:_table=MapObject
 | id = {{{id|}}}
 | category = {{{category|}}}
-| name = {{{name|}}}
 | name_sid = {{{name_sid|}}}
-| description = {{{description|}}}
 | desc_sid = {{{desc_sid|}}}
-| narrative_desc = {{{narrative_desc|}}}
 | narrative_desc_sid = {{{narrative_desc_sid|}}}
 | goods_value = {{{goods_value|}}}
 | ai_value = {{{ai_value|}}}

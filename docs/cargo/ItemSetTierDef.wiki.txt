@@ -10,7 +10,6 @@ The bot emits these inline on the parent <code>Data:ItemSet/<id></code> page. Th
 | ordinal = Integer
 | required_amount = Integer
 | description_sid = String
-| description = Wikitext
 }}
 
 <pre><nowiki>
@@ -20,8 +19,7 @@ The bot emits these inline on the parent <code>Data:ItemSet/<id></code> page. Th
 | ordinal = Integer                  <!-- 0-based position in source bonuses[] -->
 | required_amount = Integer          <!-- pieces equipped to unlock -->
 
-| description_sid = String
-| description = Wikitext             <!-- resolved English -->
+| description_sid = String           <!-- display text lives in the Translation table, type='item_set_tier' -->
 }}
 </nowiki></pre>
 
@@ -29,12 +27,12 @@ The bot emits these inline on the parent <code>Data:ItemSet/<id></code> page. Th
 * '''Primary key is <code>id</code>'''. The synthesized form <code><set_id>''tier''<ordinal></code> lets <code>Bonus.parent_id</code> join cleanly via <code>parent_type='item_set_tier'</code>.
 * '''<code>set_id</code>''' is the parent — duplicated here as a column so filtering by set doesn't require parsing the composite id.
 * '''<code>required_amount</code>''' values seen in the 2026-05-03 corpus: 2 (×17 tiers), 3 (×11), 4 (×7), 5 (×2), 6 (×2), 8 (×1).
-* '''<code>description</code>''' carries the resolved English text inline. Translations live on a <code><nowiki>{{TranslationDef | type=item_set_tier | target_id=<id>}}</nowiki></code> row (desc-only — tiers have no name).
+* '''Description''' for every language (English included) lives in the [[Template:TranslationDef|Translation]] table, <code>type='item_set_tier'</code> (description only — tiers have no name).
 
 == Related tables ==
 * [[Template:ItemSetDef|ItemSet]] — joined on <code>set_id = id</code> (N:1).
 * [[Template:BonusDef|<code>BonusDef</code>]] — joined on <code>id = parent_id</code> (1:N) where <code>Bonus.parent_type = 'item_set_tier'</code>. Each tier has 1-6 bonus effects.
-* [[Template:TranslationDef|<code>TranslationDef</code>]] — one row per tier with <code>type=item_set_tier</code> and the description SIDs for the 15 non-English locales.
+* [[Template:TranslationDef|Translation]] — the tier's description in every language (English included), joined on <code>id = Translation.target_id WHERE Translation.type='item_set_tier' AND Translation.language='{{{lang|en}}}'</code> (1:N, one row per language).
 
 == Notes ==
 

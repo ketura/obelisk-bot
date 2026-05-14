@@ -7,12 +7,12 @@ A skill carries identity (id, variant, type), shared name + desc SIDs, and a cou
 <code>Data:Skill/<id></code> is self-contained — it carries the skill's own row plus every sub-skill referenced by any of its levels:
 
 # <code><nowiki>{{SkillDef | id=… | variant=… | skill_type=… | …}}</nowiki></code>
-# <code><nowiki>{{TranslationDef | type=skill | target_id=<id> | …}}</nowiki></code> — name + desc shared across all levels
+# N × <code><nowiki>{{TranslationDef | type=skill | target_id=<id> | language=… | name=… | description=… }}</nowiki></code> — name + description, shared across all levels, one row per language
 # N × <code><nowiki>{{SkillLevelDef | skill_id=<id> | level=N | …}}</nowiki></code>
-# N × <code><nowiki>{{SkillLevelTranslationDef | skill_id=<id> | level=N | … }}</nowiki></code> — only when level overrides a name/desc
+# For each level that overrides a name/desc, N × <code><nowiki>{{TranslationDef | type=skill_level | target_id=<id> | variant=<level> | language=… | … }}</nowiki></code>
 # M × <code><nowiki>{{BonusDef | parent_type=skill_level | parent_id=<id>_L<level> | … }}</nowiki></code>
 # K × <code><nowiki>{{SubSkillDef | id=… | parent_skill_id=<id> | …}}</nowiki></code> — every sub-skill referenced by any level
-# K × <code><nowiki>{{TranslationDef | type=sub_skill | target_id=<sub_skill_id> | …}}</nowiki></code>
+# K × N × <code><nowiki>{{TranslationDef | type=sub_skill | target_id=<sub_skill_id> | language=… | …}}</nowiki></code>
 # K' × <code><nowiki>{{BonusDef | parent_type=sub_skill | parent_id=<sub_skill_id> | …}}</nowiki></code>
 
 The 77 sub-skills not referenced by any skill (8 test entries + ~69 arena legacy <code>*_old</code> entries) emit onto the catch-all page <code>Data:Skill/_orphan_sub_skills</code> instead.
@@ -23,9 +23,7 @@ The 77 sub-skills not referenced by any skill (8 test entries + ~69 arena legacy
 | variant = String
 | skill_type = String
 | is_pseudo = Boolean
-| name = String
 | name_sid = String
-| description = Wikitext
 | desc_sid = String
 | max_level = Integer
 | source_path = String
@@ -37,9 +35,8 @@ The 77 sub-skills not referenced by any skill (8 test entries + ~69 arena legacy
 | variant = String              <!-- production / arena / campaign / pseudo -->
 | skill_type = String           <!-- Common / Class / Faction; null for pseudo skills -->
 | is_pseudo = Boolean
-| name = String                 <!-- resolved English -->
+<!-- Localization references — display text lives in the Translation table, type='skill' -->
 | name_sid = String
-| description = Wikitext               <!-- resolved English; nullable -->
 | desc_sid = String             <!-- nullable -->
 | max_level = Integer           <!-- 1-3, == count(SkillLevel rows) -->
 | source_path = String
@@ -51,14 +48,14 @@ The 77 sub-skills not referenced by any skill (8 test entries + ~69 arena legacy
 * '''<code>variant</code>''' distinguishes production / arena / campaign / pseudo variants of the same skill family. Most analytical queries should <code>WHERE variant = 'production'</code>.
 '' '''<code>skill_type</code>''' is one of <code>Common</code> / <code>Class</code> / <code>FactionDef</code>. Pseudo skills (the 12 <code>skill_pseudo_''</code> entries) carry no skill_type — they're internal mechanism skills not shown in the hero UI.
 * '''<code>is_pseudo</code>''' mirrors the source <code>isPseudoSkill</code> flag. Pseudo skills typically have just 1 level and are used as reusable mechanic containers (e.g. movement bonuses applied uniformly).
-* '''<code>name_sid</code> / <code>desc_sid</code>''' point at the L10n entries; <code>name</code> / <code>desc</code> are the resolved English mirrors for at-a-glance reading.
+* '''<code>name_sid</code> / <code>desc_sid</code>''' point at the L10n entries, surfaced for traceability. Display name / description for every language (English included) live in the [[Template:TranslationDef|Translation]] table, <code>type='skill'</code>; per-level name/desc overrides use <code>type='skill_level'</code>, <code>variant=<level></code>.
 * '''<code>max_level</code>''' equals the length of the source <code>parametersPerLevel</code> array.
 
 == Related tables ==
 * [[Template:SkillLevelDef|SkillLevel]] — joined on <code>id = skill_id</code> (1:N where N=1..3).
 * [[Template:SubSkillDef|SubSkill]] — joined on <code>id = parent_skill_id</code>. Recovered by scanning every level's <code>offered_sub_skills</code>.
 * [[Template:BonusDef|<code>BonusDef</code>]] — skill-level bonuses join on <code>parent_type='skill_level' AND parent_id LIKE id || '_L%'</code>.
-* [[Template:TranslationDef|<code>TranslationDef</code>]] — one row per skill with <code>type=skill</code>, <code>target_id=id</code>.
+* [[Template:TranslationDef|Translation]] — display text in every language (English included), joined on <code>id = Translation.target_id WHERE Translation.type='skill' AND Translation.language='{{{lang|en}}}'</code> (1:N, one row per language).
 
 [[Category:Cargo Definitions]]
 </noinclude><includeonly>{{#cargo_store:_table=Skill
@@ -66,9 +63,7 @@ The 77 sub-skills not referenced by any skill (8 test entries + ~69 arena legacy
 | variant = {{{variant|}}}
 | skill_type = {{{skill_type|}}}
 | is_pseudo = {{{is_pseudo|}}}
-| name = {{{name|}}}
 | name_sid = {{{name_sid|}}}
-| description = {{{description|}}}
 | desc_sid = {{{desc_sid|}}}
 | max_level = {{{max_level|}}}
 | source_path = {{{source_path|}}}
