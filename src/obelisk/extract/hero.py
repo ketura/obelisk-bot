@@ -126,7 +126,7 @@ def _build_squad(
                 HeroStartSquadSlot(
                     variant=variant,
                     slot=slot,
-                    unit_sid=sid,
+                    unit_id=sid,
                     min=int(item.get("min", 0)),
                     max=int(item.get("max", 0)),
                 )

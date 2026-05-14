@@ -146,7 +146,7 @@ _HERO_FIELD_ORDER: tuple[str, ...] = (
 
 
 _HERO_START_SQUAD_FIELD_ORDER: tuple[str, ...] = (
-    "hero_id", "variant", "slot", "unit_sid", "min", "max",
+    "hero_id", "variant", "slot", "unit_id", "min", "max",
 )
 
 
@@ -157,7 +157,7 @@ def _render_squad_slot(hero_id: str, slot: HeroStartSquadSlot) -> str:
             "hero_id": hero_id,
             "variant": slot.variant,
             "slot": slot.slot,
-            "unit_sid": slot.unit_sid,
+            "unit_id": slot.unit_id,
             "min": slot.min,
             "max": slot.max,
         },

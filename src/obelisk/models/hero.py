@@ -81,13 +81,18 @@ class HeroStartSquadSlot(BaseModel):
     extractor to distinguish primary vs alt loadouts; source has two
     parallel arrays (``startSquad`` / ``startSquadAlt``) which we
     merge into a single side table with this discriminator.
+
+    ``unit_id`` mirrors the source's ``sid`` key but the column name
+    uses ``_id`` because it's a foreign key to ``Unit.id``, not a
+    reference into the L10n corpus — the rest of the codebase reserves
+    the ``_sid`` suffix for L10n token references.
     """
 
     model_config = ConfigDict(frozen=True)
 
     variant: str  # "primary" or "alt"
     slot: int     # 1-based position within the variant
-    unit_sid: Sid
+    unit_id: Sid  # joins Unit.id
     min: int
     max: int
 
