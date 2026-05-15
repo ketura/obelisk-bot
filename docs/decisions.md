@@ -1887,6 +1887,75 @@ Because of those two quirks, the `Difficulty` table doesn't carry a `{{Translati
 - Real `Translation` row when source-side L10n materializes.
 - AI-side difficulty knobs that may land in lobby variants once those fill out.
 
+## D-040 — Translation restructure: wide → long format; English moves into the table; supersedes the wide-format halves of D-024 / D-026 / D-030
+
+**Date:** 2026-05-14
+**Status:** Locked. Schema + bot code both implemented; the 51-test suite and a dedicated emit-pipeline smoke test pass. Two locked-doc bugs surfaced during implementation and were fixed (see "Implementation notes" below). Pending: commit, and the fresh end-to-end re-upload — the DB is being wiped and regenerated, so there are no migration concerns.
+
+### Problem
+
+The `Translation`, `Entry`, and `SpellRank` Cargo tables stored translations in **wide format**: one row per entity, with ~15 languages spread across ~30 columns (`pt_br_name`, `pt_br_description`, `cs_name`, …; `SpellRank` was worst at 45 language columns). English was *not* in these tables at all — it lived as inline `name` / `description` columns on each parent entity table (`Unit.name`, `Faction.name`, …), deliberately, so the common "English label for X" query was a single-table read.
+
+This made language a property of the *column name*, not a *value*. A language-aware wiki template had no way to filter by language — it had to branch with a 15-way `{{#switch:{{{lang}}}|fr=…|de=…|…}}` wrapping fifteen near-identical `#cargo_query` calls. Every new language meant editing every such template. The "English is easy / everything else is hard" split also meant the multilingual query paths stayed under-exercised and bugs hid there.
+
+### Resolution
+
+Unpivot to **long format**. `language` becomes a real column; a language-aware query is a uniform `WHERE language=…` filter. English is stored in the table too (`language=en`) — it is *not* a special case. Parent entity tables drop their inline English `name`/`description` columns entirely; all display text for every language, English included, comes from `Translation`.
+
+New `Translation` schema (key tuple `(target_id, type, subtype, variant, language)`):
+
+```
+target_id    String   — entity id (Unit.id, …); empty for catch-all rows keyed by subtype
+type         String   — unit, faction, hero, attack_archetype, spell_rank, …
+subtype      String   — secondary key tier; sparse
+variant      String   — tertiary key tier; sparse (carries level for per-level rows)
+language     String   — en, pt_br, cs, fr, de, hu, it, ja, ko, pl, ru, es, tr, uk, zh_cn, zh_tw
+name              String
+description       Wikitext
+bonus_description Wikitext  — sparse; only spell-rank rows populate it
+```
+
+`type` / `subtype` / `variant` are tiers of one discriminator pyramid (Entry's existing shape); `target_id` usually pairs with `type` but the coupling is not architecturally enforced — "follow this structure and see what shakes out" was the explicit call. The discriminator column is named `type`, not `target_type` (considered, rejected — `type` matches Entry and keeps the pyramid uniform).
+
+### Decisions inside the restructure
+
+- **English code is `en`**, matching the existing short-code scheme (`cs`, `fr`, `pt_br`), not `english`.
+- **`name_sid` / `desc_sid` stay on the parent entity** (or its thin `Entry` / `SpellRank` stub), *not* on `Translation`. They are language-independent traceability pointers; duplicating them across 15 language rows would be waste with no query benefit. They are explicitly *not* the translation lookup path — the join is on `id` / the key tuple.
+- **`Entry` becomes a thin structural stub** — `type, subtype, variant, icon, name_sid, desc_sid, narrative_description_sid, source_path`. All its display text moved to `Translation`. It's a catch-all, so a thin shape is correct.
+- **`SpellRank` becomes structural-only** — `spell_id, level, description_sid, bonus_description_sid, mana_cost, upgrade_cost`. Its text moved to `Translation` under `type='spell_rank'`, `target_id=<spell_id>`, `variant=<level>`, carrying `description` + `bonus_description` only. There is **no `name` on `spell_rank` rows and no `name_sid` on `SpellRank`** — a spell's name is static across ranks; it lives once on `SpellDef.name_sid` / `Translation type='spell'`. (The original draft of this record kept `name_sid` on `SpellRank`; that was the redundancy the user caught at the start of implementation — see "Implementation notes".)
+- **Multi-text entities use extra `type` discriminators, not extra `Translation` columns** — following the Hero/motto precedent. The shared table stays at `name`/`description`/`bonus_description`; entities with more text fields emit additional `Translation` rows under their own `type`:
+  - Hero: `type='hero'` (name + description) + `type='hero_motto'` (motto in the `description` column).
+  - Artifact: `type='artifact'` + `type='artifact_upgrade'` + `type='artifact_narrative'`.
+  - Building: `type='building'` + `type='building_narrative'`.
+  - MapObject: `type='map_object'` + `type='map_object_narrative'`.
+- **Per-level text uses the `variant` tier** — `type='law_level'` / `type='skill_level'` / `type='spell_rank'` rows carry the level in `variant`, keyed by the parent's `target_id`. This replaces the old folded-into-Entry approach from D-018's `LawLevelTranslation` / `SkillLevelTranslation` consolidation.
+- **DifficultyDef** — its `description` is literal English source text with no SID and no other-language data. It still moves into `Translation` as `language=en`-only rows (`type='difficulty'`). Strict uniformity: a query in any other language correctly returns nothing, and the lookup path stays identical to every other entity. Considered keeping it inline as the one exception; rejected — the whole point is to remove the English-is-special branch everywhere.
+- **`normalize_name` relocates.** The smart-apostrophe / typographic flattening that `emit/cargo.py`'s `render_call` applied to the English `name` / `display_name` columns on entity tables must follow English into the `language='en'` `Translation` row's `name` field — and *only* that row. Per-language siblings keep their typography (only the English name is filename-fodder for wiki icon/image references). The `_NAME_FIELDS` hook in `render_call` no longer fires because those columns left the entity tables.
+
+### Considered and rejected
+
+- **Full EAV** (one row per entity-language-*field*, with a `field` discriminator and a single `text` column). Rejected: you only unpivot the axis queried *dynamically*. Language is dynamic (driven by reader/page param); field is *static* (a template knows at authoring time that the header wants `name` and the body wants `description`). EAV would re-introduce the exact "template must branch on a value" pain, force a coherent-record read to span multiple rows, and collapse the `String` vs `Wikitext` type distinction between `name` and `description`. The field set is small and closed — columns are correct.
+- **`target_type` as the discriminator column name.** Rejected in favor of `type` to mirror Entry's existing pyramid; the user judged `target_id`↔`type` coupling useful-but-not-mandatory.
+- **A dedicated `motto` / `narrative` / `upgrade` column on `Translation`.** Rejected — that's the over-specialization the restructure is escaping. Extra `type` discriminators handle it with no shared-schema creep.
+
+### Implementation notes
+
+Both phases landed in one session: the keystone (`render_translation_block` → one `{{TranslationDef}}` per language, all 16 including English, 8-key shape; thin `render_entry_block`; `normalize_name` relocated to the `en` row and its hook dropped from `emit/cargo.py`'s `render_call`) and the full emit sweep — `emit/{unit,spell,hero,faction,law,skill,artifact,building,map_object,item_set,astrologist_event,difficulty}.py`, `models/spell.py`, and `cli.py`. The 2 pre-existing stale baseline tests (`test_index` index format, `test_upload` throttle clock) were fixed first.
+
+Verified: the 51-test suite is green, plus a direct-call keystone harness and a 16-function emit-pipeline smoke test that asserts the long-format invariants — no inline `name`/`description` on any entity `Def` row, `language=` on every `TranslationDef`, and the multi-`type` discriminators all fire.
+
+**Two locked-doc bugs surfaced and were fixed:**
+- `SpellRankDef.wiki.txt` carried `name_sid` and (in a field note) implied `spell_rank` Translation rows carry a `name`. They don't — a spell's name is static across ranks. `name_sid` dropped from `SpellRank`; the spell name lives once under `type='spell'`.
+- `EntryDef.wiki.txt` still listed `law_level,skill_level` in its `type` enum and claimed they fold into `Entry`. Per the locked `LawLevelDef`/`SkillLevelDef` docs (and this record's "Per-level text uses the `variant` tier" decision), those are plain `{{TranslationDef}}` rows keyed by `target_id`+`variant`, not `Entry` rows. Enum + `variant` note corrected.
+
+**Decisions made during implementation, refining the plan:**
+- `render_translation_block` gained `en_name_fallback` / `en_description_fallback` kwargs. The former preserves the Entry-seed `display_name_fallback` safety net; the latter feeds Difficulty's literal English description (no SID) into the `en` row.
+- `Entry`'s `narrative_description_sid` is retained — it *is* used (`resource` rows carry one) — and emits as a `type='<entry_type>_narrative'` Translation block, mirroring the `*_narrative` discriminators for Artifact / Building / MapObject.
+- `hero_motto` text goes in the `description` column of its Translation rows (the old wide format put motto in `name`); motto may carry markup.
+- The "thin `Entry` model" in the original sub-task list was a no-op — `Entry` has no Python model; it's emitted directly from seeds/extractors.
+
+**Pending:** commit; the fresh end-to-end re-upload against the real game corpus (DB wiped + regenerated, so no migration concerns).
+
 ## Open questions / known unknowns
 
 

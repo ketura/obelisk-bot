@@ -33,14 +33,17 @@ class SpellRankRecord(BaseModel):
     spell_id: str
     level: int  # 1..4
 
+    # Per D-040: SpellRank is structural-only. Resolved text (every
+    # language, English included) lives in the Translation table under
+    # type='spell_rank'; the model carries only the source SIDs the
+    # emitter resolves from. There is no per-rank name — the spell's
+    # name is static across ranks and lives on SpellRecord.
     description_sid: Sid | None = None
-    description: str | None = None  # resolved English
 
     mana_cost: int | None = None
 
     # Level-up bonus + upgrade cost (None for level 1)
     bonus_description_sid: Sid | None = None
-    bonus_description: str | None = None
     upgrade_cost: int | None = None
 
 

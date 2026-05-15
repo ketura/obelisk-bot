@@ -21,7 +21,6 @@ from typing import Any
 
 from obelisk.emit.cargo import render_call
 from obelisk.emit.unit import (
-    _lookup_text,
     render_entry_block,
     render_translation_block,
 )
@@ -32,7 +31,7 @@ from obelisk.resolve import PlaceholderResolver
 
 
 _FACTION_FIELD_ORDER: tuple[str, ...] = (
-    "id", "name", "description",
+    "id",
     "icon", "icon_faction_laws",
     "biome", "resource",
     "name_sid", "desc_sid",
@@ -63,13 +62,8 @@ def emit_faction_page(
     ``{{Translation}}`` row (per D-026), then the inline city-name
     Entry rows (per D-025).
     """
-    en_name = _lookup_text(faction.name_sid, "english", corpus, resolver, None, None)
-    en_desc = _lookup_text(faction.desc_sid, "english", corpus, resolver, None, None)
-
     faction_params: dict[str, Any] = {
         "id": faction.id,
-        "name": en_name,
-        "description": en_desc,
         "icon": faction.icon or None,
         "icon_faction_laws": faction.icon_faction_laws or None,
         "biome": faction.biome or None,

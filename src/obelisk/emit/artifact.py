@@ -11,20 +11,17 @@ from typing import Any
 
 from obelisk.emit.cargo import render_call
 from obelisk.emit.hero import render_bonus
-from obelisk.emit.unit import (
-    _lookup_text,
-    render_translation_block,
-)
+from obelisk.emit.unit import render_translation_block
 from obelisk.models.artifact import ArtifactRecord
 from obelisk.models.localization import LocalizationCorpus
 from obelisk.resolve import PlaceholderResolver
 
 
 _ARTIFACT_FIELD_ORDER: tuple[str, ...] = (
-    "id", "name", "description",
+    "id",
     "name_sid", "description_sid",
-    "upgrade_description_sid", "upgrade_description",
-    "narrative_description_sid", "narrative_description",
+    "upgrade_description_sid",
+    "narrative_description_sid",
     "icon",
     "slot", "rarity", "artifact_set_id",
     "goods_value", "max_level",
@@ -54,33 +51,12 @@ def emit_artifact_page(
         if artifact.raw_json else None
     )
 
-    en_name = _lookup_text(
-        artifact.name_sid, "english", corpus, resolver, None, None,
-        artifact_json=artifact_json,
-    )
-    en_desc = _lookup_text(
-        artifact.description_sid, "english", corpus, resolver, None, None,
-        artifact_json=artifact_json,
-    )
-    en_upg = _lookup_text(
-        artifact.upgrade_description_sid, "english", corpus, resolver, None, None,
-        artifact_json=artifact_json,
-    )
-    en_narr = _lookup_text(
-        artifact.narrative_description_sid, "english", corpus, resolver, None, None,
-        artifact_json=artifact_json,
-    )
-
     main_params: dict[str, Any] = {
         "id": artifact.id,
-        "name": en_name,
-        "description": en_desc,
         "name_sid": artifact.name_sid,
         "description_sid": artifact.description_sid,
         "upgrade_description_sid": artifact.upgrade_description_sid,
-        "upgrade_description": en_upg,
         "narrative_description_sid": artifact.narrative_description_sid,
-        "narrative_description": en_narr,
         "icon": artifact.icon,
         "slot": artifact.slot,
         "rarity": artifact.rarity,
@@ -101,17 +77,25 @@ def emit_artifact_page(
         "<!-- Bot-managed page. Edit the source in obelisk-bot, not here. -->",
         render_call("ArtifactDef", main_params, key_order=_ARTIFACT_FIELD_ORDER),
     ]
-    xlat = render_translation_block(
-        translation_type="artifact",
-        target_id=artifact.id,
-        name_sid=artifact.name_sid,
-        desc_sid=artifact.description_sid,
-        corpus=corpus,
-        resolver=resolver,
-        artifact_json=artifact_json,
-    )
-    if xlat:
-        blocks.append(xlat)
+    # Three text fields, three type discriminators (D-040): the main
+    # `artifact` row carries name + description; `artifact_upgrade` and
+    # `artifact_narrative` carry their text in the description column.
+    for tt, sid in (
+        ("artifact", artifact.description_sid),
+        ("artifact_upgrade", artifact.upgrade_description_sid),
+        ("artifact_narrative", artifact.narrative_description_sid),
+    ):
+        xlat = render_translation_block(
+            translation_type=tt,
+            target_id=artifact.id,
+            name_sid=artifact.name_sid if tt == "artifact" else None,
+            desc_sid=sid,
+            corpus=corpus,
+            resolver=resolver,
+            artifact_json=artifact_json,
+        )
+        if xlat:
+            blocks.append(xlat)
     for b in artifact.bonuses:
         blocks.append(render_bonus(b))
     return "\n\n".join(blocks) + "\n"

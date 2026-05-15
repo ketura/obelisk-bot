@@ -6,6 +6,7 @@ from typing import Any, Iterator
 
 from obelisk.emit.cargo import block_hash, render_call
 from obelisk.resolve import PlaceholderResolver, html_to_wiki
+from obelisk.resolve.wikitext import normalize_name
 from obelisk.extract.ownership import OwnershipClaims
 from obelisk.models.localization import LocalizationCorpus
 from obelisk.models.unit import AttackSlot, Unit, UnitAbility, UnitAttack
@@ -47,10 +48,17 @@ _TRANSLATION_LANG_ORDER: tuple[str, ...] = (
     "spanish", "turkish", "ukrainian", "zhCN", "zhTW",
 )
 
+# Per D-040: long-format Translation rows include English as a row
+# (language=en), not a special-cased inline column. This is the full
+# 16-language emit order — English first, then the 15 others in the
+# established order. Keys are the game's Lang/ directory names; map
+# to short codes via LANG_CODE.
+_ALL_LANG_ORDER: tuple[str, ...] = ("english", *_TRANSLATION_LANG_ORDER)
+
 
 _UNIT_FIELD_ORDER: tuple[str, ...] = (
     "id", "unused", "faction", "tier", "source_path",
-    "name", "description", "name_sid", "desc_sid", "base_sid", "upgrade_sid",
+    "name_sid", "desc_sid", "base_sid", "upgrade_sid",
     "hp", "offence", "defence", "damage_min", "damage_max",
     "initiative", "speed", "luck", "morale",
     "energy_per_cast", "energy_per_round", "energy_per_take_damage",
@@ -79,7 +87,7 @@ _TEMPLATE_NAME_BY_TYPE: dict[str, str] = {
 
 _IDENTITY_ORDER: tuple[str, ...] = (
     "ability_id", "unit_id", "ability_type", "ordinal", "variant",
-    "name", "description", "name_sid", "desc_sid",
+    "name_sid", "desc_sid",
 )
 
 
@@ -437,41 +445,24 @@ ENTRY_SEEDS: dict[str, dict[str, dict[str, Any]]] = {
 }
 
 
-def _entry_field_order() -> tuple[str, ...]:
-    base = (
-        "type", "subtype", "variant",
-        "display_name", "description",
-        "narrative_description",
-        "icon",
-        "name_sid", "desc_sid", "narrative_description_sid",
-        "source_path",
-    )
-    lang_pairs: list[str] = []
-    for lang_dir in _TRANSLATION_LANG_ORDER:
-        code = LANG_CODE[lang_dir]
-        lang_pairs.extend([f"{code}_name", f"{code}_description"])
-    return base + tuple(lang_pairs)
+# Per D-040: Entry is a thin structural stub — identity, traceability
+# SIDs, and provenance only. All display text (every language, English
+# included) lives in the shared Translation table, keyed by the
+# matching (type, subtype, variant).
+_ENTRY_FIELD_ORDER: tuple[str, ...] = (
+    "type", "subtype", "variant", "icon",
+    "name_sid", "desc_sid", "narrative_description_sid",
+    "source_path",
+)
 
 
-_ENTRY_FIELD_ORDER: tuple[str, ...] = _entry_field_order()
-
-
-def _translation_field_order() -> tuple[str, ...]:
-    """Field order for ``{{Translation | …}}`` invocations.
-
-    Per D-026: type and target_id at the head, then the SID pair for
-    traceability, then 15 × (lang_name, lang_desc) pairs in
-    `_TRANSLATION_LANG_ORDER`.
-    """
-    base = ("type", "target_id", "name_sid", "desc_sid")
-    lang_pairs: list[str] = []
-    for lang_dir in _TRANSLATION_LANG_ORDER:
-        code = LANG_CODE[lang_dir]
-        lang_pairs.extend([f"{code}_name", f"{code}_description"])
-    return base + tuple(lang_pairs)
-
-
-_TRANSLATION_FIELD_ORDER: tuple[str, ...] = _translation_field_order()
+# Per D-040: long-format Translation — one row per (target, language).
+# The 8-key shape: the key tuple (target_id, type, subtype, variant,
+# language) followed by the three value columns.
+_TRANSLATION_FIELD_ORDER: tuple[str, ...] = (
+    "target_id", "type", "subtype", "variant", "language",
+    "name", "description", "bonus_description",
+)
 
 
 def render_translation_block(
@@ -481,6 +472,11 @@ def render_translation_block(
     desc_sid: str | None,
     corpus: LocalizationCorpus,
     *,
+    subtype: str | None = None,
+    variant: str | None = None,
+    bonus_desc_sid: str | None = None,
+    en_name_fallback: str | None = None,
+    en_description_fallback: str | None = None,
     resolver: PlaceholderResolver | None = None,
     unit_json: dict[str, Any] | None = None,
     ability_json: dict[str, Any] | None = None,
@@ -493,46 +489,83 @@ def render_translation_block(
     sub_skill_json: dict[str, Any] | None = None,
     skill_level: int | None = None,
 ) -> str:
-    """Render a single ``{{Translation | …}}`` template invocation.
+    """Render the long-format Translation rows for one entity (D-040).
 
-    Returns the bare template call (no surrounding comment, no
-    trailing newline) — callers append it to a parent entity's page
-    after the entity's structural row. Either SID may be ``None``;
-    if both are missing, returns ``""`` (skip — caller filters).
-    ``unit_json`` / ``ability_json`` are forwarded to the resolver
-    for placeholder substitution context (used by unit and
-    unit-ability translations); pass ``None`` for everything else.
-    See D-026.
+    Emits one ``{{TranslationDef | … }}`` call per language — all 16,
+    English included — keyed by ``(target_id, type, subtype, variant,
+    language)``. Each row carries whichever of ``name`` /
+    ``description`` / ``bonus_description`` resolved for that language;
+    a language with nothing to show is skipped (sparse — a missing
+    translation is an absent row, not an empty one).
+
+    Returns the calls joined by blank lines, or ``""`` when no SID was
+    given / nothing resolved in any language. Callers append the result
+    to a parent entity's page after its structural row and filter
+    empties.
+
+    ``subtype`` / ``variant`` are the secondary/tertiary key tiers —
+    sparse, used by catch-all Entry-style rows and per-level rows.
+    ``bonus_desc_sid`` populates the ``bonus_description`` column (only
+    spell ranks use it). ``en_name_fallback`` / ``en_description_fallback``
+    supply English ``name`` / ``description`` when the corresponding SID
+    doesn't resolve in the corpus — used by Entry seeds (name) and by
+    Difficulty, whose description is literal English source text with no
+    SID at all (D-039 / D-040). The ``*_json`` / ``skill_level`` kwargs
+    thread resolver context for placeholder substitution.
     """
-    if not name_sid and not desc_sid:
+    if not name_sid and not desc_sid and not bonus_desc_sid:
         return ""
 
-    params: dict[str, Any] = {
-        "type": translation_type,
-        "target_id": target_id,
-        "name_sid": name_sid,
-        "desc_sid": desc_sid,
-    }
-    for lang_dir in _TRANSLATION_LANG_ORDER:
-        code = LANG_CODE[lang_dir]
-        if name_sid:
-            params[f"{code}_name"] = _lookup_text(
-                name_sid, lang_dir, corpus, resolver, unit_json, ability_json,
-                spec_json=spec_json, magic_json=magic_json, set_json=set_json,
-                artifact_json=artifact_json, law_json=law_json,
-                skill_json=skill_json, sub_skill_json=sub_skill_json,
-                skill_level=skill_level,
-            )
-        if desc_sid:
-            params[f"{code}_description"] = _lookup_text(
-                desc_sid, lang_dir, corpus, resolver, unit_json, ability_json,
-                spec_json=spec_json, magic_json=magic_json, set_json=set_json,
-                artifact_json=artifact_json, law_json=law_json,
-                skill_json=skill_json, sub_skill_json=sub_skill_json,
-                skill_level=skill_level,
-            )
+    ctx: dict[str, Any] = dict(
+        unit_json=unit_json, ability_json=ability_json, spec_json=spec_json,
+        magic_json=magic_json, set_json=set_json, artifact_json=artifact_json,
+        law_json=law_json, skill_json=skill_json, sub_skill_json=sub_skill_json,
+        skill_level=skill_level,
+    )
 
-    return render_call("TranslationDef", params, key_order=_TRANSLATION_FIELD_ORDER)
+    calls: list[str] = []
+    for lang_dir in _ALL_LANG_ORDER:
+        code = LANG_CODE[lang_dir]
+        name = (
+            _lookup_text(name_sid, lang_dir, corpus, resolver, **ctx)
+            if name_sid else None
+        )
+        description = (
+            _lookup_text(desc_sid, lang_dir, corpus, resolver, **ctx)
+            if desc_sid else None
+        )
+        bonus_description = (
+            _lookup_text(bonus_desc_sid, lang_dir, corpus, resolver, **ctx)
+            if bonus_desc_sid else None
+        )
+        if code == "en":
+            # The English name is filename-fodder for wiki icon/image
+            # references — flatten smart apostrophes to ASCII. Per-
+            # language siblings keep their typography (pure display).
+            # Fall back to a caller-supplied English name when the SID
+            # doesn't resolve (Entry seeds carry such fallbacks).
+            name = normalize_name(name) if name else name
+            if not name and en_name_fallback:
+                name = normalize_name(en_name_fallback)
+            if not description and en_description_fallback:
+                description = en_description_fallback
+        if not name and not description and not bonus_description:
+            continue
+        params: dict[str, Any] = {
+            "target_id": target_id,
+            "type": translation_type,
+            "subtype": subtype,
+            "variant": variant,
+            "language": code,
+            "name": name,
+            "description": description,
+            "bonus_description": bonus_description,
+        }
+        calls.append(
+            render_call("TranslationDef", params, key_order=_TRANSLATION_FIELD_ORDER)
+        )
+
+    return "\n\n".join(calls)
 
 
 def iter_entry_seeds() -> Iterator[tuple[str, str]]:
@@ -563,11 +596,11 @@ def render_entry_block(
     magic_json: dict[str, Any] | None = None,
     skill_level: int | None = None,
 ) -> str:
-    """Render a single ``{{EntryDef | …}}`` template invocation.
+    """Render a thin ``{{EntryDef}}`` stub plus its Translation rows.
 
-    Returns just the bare template call (no surrounding comment, no
-    trailing newline). Use ``emit_entry_page`` when you want a complete
-    standalone wiki page; use this when you're embedding the row in
+    Returns the bare blocks (no surrounding comment, no trailing
+    newline). Use ``emit_entry_page`` when you want a complete
+    standalone wiki page; use this when you're embedding the rows in
     another emitter's output (e.g. faction pages embedding their city
     rows, or law/skill pages embedding per-level translations).
 
@@ -580,50 +613,68 @@ def render_entry_block(
     to substitute (e.g. ``law_json=level.raw_json`` resolves a law
     level's description placeholders against the level's JSON).
 
-    See D-024 / D-036 (narrative_description + source_path columns).
+    Per D-040: emits a thin ``{{EntryDef}}`` structural stub followed
+    by the per-language ``{{TranslationDef}}`` rows for this Entry's
+    display text — keyed by ``(type, subtype, variant)`` with an empty
+    ``target_id`` (catch-all rows aren't keyed to an entity id). When
+    ``narrative_desc_sid`` is set, an additional
+    ``type='<entry_type>_narrative'`` Translation block carries the
+    narrative text in the ``description`` column — the same multi-type
+    pattern artifacts / buildings / map objects use.
     """
-    ctx = dict(
-        law_json=law_json, skill_json=skill_json, sub_skill_json=sub_skill_json,
-        magic_json=magic_json, skill_level=skill_level,
-    )
-    en_name = (
-        _lookup_text(name_sid, "english", corpus, resolver, None, None, **ctx)
-        if name_sid else None
-    )
-    en_desc = (
-        _lookup_text(desc_sid, "english", corpus, resolver, None, None, **ctx)
-        if desc_sid else None
-    )
-    en_narr = (
-        _lookup_text(narrative_desc_sid, "english", corpus, resolver, None, None)
-        if narrative_desc_sid else None
-    )
-
-    params: dict[str, Any] = {
+    stub_params: dict[str, Any] = {
         "type": entry_type,
         "subtype": subtype,
         "variant": variant,
-        "display_name": en_name or display_name_fallback,
-        "description": en_desc,
-        "narrative_description": en_narr,
         "icon": icon,
         "name_sid": name_sid,
         "desc_sid": desc_sid,
         "narrative_description_sid": narrative_desc_sid,
         "source_path": source_path,
     }
-    for lang_dir in _TRANSLATION_LANG_ORDER:
-        code = LANG_CODE[lang_dir]
-        if name_sid:
-            params[f"{code}_name"] = _lookup_text(
-                name_sid, lang_dir, corpus, resolver, None, None, **ctx,
-            )
-        if desc_sid:
-            params[f"{code}_description"] = _lookup_text(
-                desc_sid, lang_dir, corpus, resolver, None, None, **ctx,
-            )
+    blocks: list[str] = [
+        render_call("EntryDef", stub_params, key_order=_ENTRY_FIELD_ORDER),
+    ]
 
-    return render_call("EntryDef", params, key_order=_ENTRY_FIELD_ORDER)
+    xlat = render_translation_block(
+        translation_type=entry_type,
+        target_id="",
+        name_sid=name_sid,
+        desc_sid=desc_sid,
+        corpus=corpus,
+        subtype=subtype,
+        variant=variant,
+        en_name_fallback=display_name_fallback,
+        resolver=resolver,
+        law_json=law_json,
+        skill_json=skill_json,
+        sub_skill_json=sub_skill_json,
+        magic_json=magic_json,
+        skill_level=skill_level,
+    )
+    if xlat:
+        blocks.append(xlat)
+
+    if narrative_desc_sid:
+        narr_xlat = render_translation_block(
+            translation_type=f"{entry_type}_narrative",
+            target_id="",
+            name_sid=None,
+            desc_sid=narrative_desc_sid,
+            corpus=corpus,
+            subtype=subtype,
+            variant=variant,
+            resolver=resolver,
+            law_json=law_json,
+            skill_json=skill_json,
+            sub_skill_json=sub_skill_json,
+            magic_json=magic_json,
+            skill_level=skill_level,
+        )
+        if narr_xlat:
+            blocks.append(narr_xlat)
+
+    return "\n\n".join(blocks)
 
 
 def emit_entry_page(
@@ -700,7 +751,7 @@ def emit_entry_page_from_seed(
 
 _ATTACK_PASSIVE_FIELD_ORDER: tuple[str, ...] = (
     "attack_passive_id", "pattern_token", "rank",
-    "name_sid", "desc_sid", "display_name", "description",
+    "name_sid", "desc_sid",
 )
 
 def emit_attack_passive_page(
@@ -716,23 +767,12 @@ def emit_attack_passive_page(
     name_sid = info.get("name_sid")
     desc_sid = info.get("desc_sid")
 
-    en_name = (
-        _lookup_text(name_sid, "english", corpus, resolver, None, None)
-        if isinstance(name_sid, str) else None
-    )
-    en_desc = (
-        _lookup_text(desc_sid, "english", corpus, resolver, None, None)
-        if isinstance(desc_sid, str) else None
-    )
-
     parent_params: dict[str, Any] = {
         "attack_passive_id": attack_passive_id,
         "pattern_token": info.get("pattern_token"),
         "rank": info.get("rank"),
         "name_sid": name_sid,
         "desc_sid": desc_sid,
-        "display_name": en_name or info.get("display_name"),
-        "description": en_desc,
     }
 
     blocks = [
@@ -930,15 +970,11 @@ def _unit_params(
 ) -> dict[str, Any]:
     s = unit.stats
     cost_by_resource = {c.resource: c.amount for c in unit.cost}
-    en_name = _lookup_text(unit.name_sid, "english", corpus, resolver, unit_json)
-    en_desc = _lookup_text(unit.narrative_description_sid, "english", corpus, resolver, unit_json)
     params: dict[str, Any] = {
         "id": unit.id,
         "faction": unit.faction.value,
         "tier": unit.tier,
         "source_path": unit.source_path,
-        "name": en_name,
-        "description": en_desc,
         "name_sid": unit.name_sid,
         "desc_sid": unit.narrative_description_sid,
         "base_sid": unit.base_sid,
@@ -979,17 +1015,12 @@ def _ability_params(
     unit_id: str, ability: UnitAbility, corpus: LocalizationCorpus,
     resolver: PlaceholderResolver | None = None, unit_json: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    aj = _ability_json_for(ability, unit_json)
-    en_name = _lookup_text(ability.name_sid, "english", corpus, resolver, unit_json, aj) if ability.name_sid else None
-    en_desc = _lookup_text(ability.desc_sid, "english", corpus, resolver, unit_json, aj) if ability.desc_sid else None
     return {
         "ability_id": make_ability_id(unit_id, ability.ability_type, ability.ordinal, ability.variant),
         "unit_id": unit_id,
         "ability_type": ability.ability_type,
         "ordinal": ability.ordinal,
         "variant": ability.variant,
-        "name": en_name,
-        "description": en_desc,
         "name_sid": ability.name_sid,
         "desc_sid": ability.desc_sid,
         "affected_stat": ability.affected_stat,

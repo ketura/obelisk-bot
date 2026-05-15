@@ -12,10 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 from obelisk.emit.cargo import render_call
-from obelisk.emit.unit import (
-    _lookup_text,
-    render_translation_block,
-)
+from obelisk.emit.unit import render_translation_block
 from obelisk.models.hero import (
     Bonus,
     HeroClassRecord,
@@ -34,7 +31,7 @@ from obelisk.resolve import PlaceholderResolver
 
 
 _HERO_CLASS_FIELD_ORDER: tuple[str, ...] = (
-    "id", "name", "description", "name_sid", "desc_sid",
+    "id", "name_sid", "desc_sid",
     "faction", "class_type",
     "mesh", "mount", "native_biome", "skills_roll_variant",
     "cost_gold", "start_level", "attacks_times_before",
@@ -61,15 +58,11 @@ def emit_hero_class_page(
     """Render ``Data:HeroClass/<id>`` — ``{{HeroClass}}`` row plus the
     unified ``{{Translation | type=hero_class | …}}`` row.
     """
-    en_name = _lookup_text(hero_class.name_sid, "english", corpus, resolver, None, None)
-    en_desc = _lookup_text(hero_class.desc_sid, "english", corpus, resolver, None, None)
     s = hero_class.stats
     r = hero_class.stats_rolls
 
     params: dict[str, Any] = {
         "id": hero_class.id,
-        "name": en_name,
-        "description": en_desc,
         "name_sid": hero_class.name_sid,
         "desc_sid": hero_class.desc_sid,
         "faction": hero_class.faction,
@@ -126,7 +119,7 @@ def emit_hero_class_page(
 
 
 _HERO_FIELD_ORDER: tuple[str, ...] = (
-    "id", "name", "motto", "description",
+    "id",
     "name_sid", "motto_sid", "desc_sid",
     "class_id", "faction", "class_type",
     "icon", "specialization_id",
@@ -184,15 +177,8 @@ def emit_hero_page(
        see D-027).
     4. ``{{HeroStartSquad | …}}`` × N — primary + alt squad slots.
     """
-    en_name = _lookup_text(hero.name_sid, "english", corpus, resolver, None, None)
-    en_motto = _lookup_text(hero.motto_sid, "english", corpus, resolver, None, None)
-    en_desc = _lookup_text(hero.desc_sid, "english", corpus, resolver, None, None)
-
     params: dict[str, Any] = {
         "id": hero.id,
-        "name": en_name,
-        "motto": en_motto,
-        "description": en_desc,
         "name_sid": hero.name_sid,
         "motto_sid": hero.motto_sid,
         "desc_sid": hero.desc_sid,
@@ -272,8 +258,8 @@ def emit_hero_page(
     motto_xlat = render_translation_block(
         translation_type="hero_motto",
         target_id=hero.id,
-        name_sid=hero.motto_sid,
-        desc_sid=None,
+        name_sid=None,
+        desc_sid=hero.motto_sid,
         corpus=corpus,
         resolver=resolver,
     )
@@ -292,7 +278,7 @@ def emit_hero_page(
 
 
 _HERO_SPECIALIZATION_FIELD_ORDER: tuple[str, ...] = (
-    "id", "name", "description", "name_sid", "desc_sid", "icon", "source_path",
+    "id", "name_sid", "desc_sid", "icon", "source_path",
 )
 
 _BONUS_FIELD_ORDER: tuple[str, ...] = (
@@ -351,13 +337,9 @@ def emit_hero_specialization_page(
     3. N × ``{{HeroSpecializationBonus | spec_id=<id> | ordinal=N | …}}``.
     """
     sj = spec.raw_json or None
-    en_name = _lookup_text(spec.name_sid, "english", corpus, resolver, None, None, spec_json=sj)
-    en_desc = _lookup_text(spec.desc_sid, "english", corpus, resolver, None, None, spec_json=sj)
 
     main_params: dict[str, Any] = {
         "id": spec.id,
-        "name": en_name,
-        "description": en_desc,
         "name_sid": spec.name_sid,
         "desc_sid": spec.desc_sid,
         "icon": spec.icon,
@@ -391,7 +373,7 @@ def emit_hero_specialization_page(
 
 
 _HERO_SUB_CLASS_FIELD_ORDER: tuple[str, ...] = (
-    "id", "name", "description", "name_sid", "desc_sid", "icon",
+    "id", "name_sid", "desc_sid", "icon",
     "faction", "class_type",
     "activation_skill_1_sid", "activation_skill_1_level",
     "activation_skill_2_sid", "activation_skill_2_level",
@@ -414,13 +396,8 @@ def emit_hero_sub_class_page(
     2. ``{{Translation | type=hero_sub_class | target_id=<id> | …}}``.
     3. N × ``{{HeroSubClassBonus | sub_class_id=<id> | ordinal=N | …}}``.
     """
-    en_name = _lookup_text(sub_class.name_sid, "english", corpus, resolver, None, None)
-    en_desc = _lookup_text(sub_class.desc_sid, "english", corpus, resolver, None, None)
-
     main_params: dict[str, Any] = {
         "id": sub_class.id,
-        "name": en_name,
-        "description": en_desc,
         "name_sid": sub_class.name_sid,
         "desc_sid": sub_class.desc_sid,
         "icon": sub_class.icon,

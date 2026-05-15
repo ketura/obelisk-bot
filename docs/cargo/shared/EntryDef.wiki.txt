@@ -18,7 +18,7 @@ In both cases the bot resolves each row's translations from the L10n corpus on e
 
 == Schema ==
 {{#cargo_declare:_table=Entry
-| type = String (allowed values=attack_archetype,movement,creature_type,FactionCityName,resource,hero_stat,unit_stat,law_level,skill_level)
+| type = String (allowed values=attack_archetype,movement,creature_type,FactionCityName,resource,hero_stat,unit_stat)
 | subtype = String
 | variant = String
 | icon = String
@@ -30,7 +30,7 @@ In both cases the bot resolves each row's translations from the L10n corpus on e
 
 <pre><nowiki>
 {{EntryDef
-| type = String (allowed values=attack_archetype,movement,creature_type,FactionCityName,resource,hero_stat,unit_stat,law_level,skill_level)
+| type = String (allowed values=attack_archetype,movement,creature_type,FactionCityName,resource,hero_stat,unit_stat)
 | subtype = String
 | variant = String                            <!-- optional third key component for sub-row variants (level/rank); sparse -->
 | icon = String
@@ -42,8 +42,8 @@ In both cases the bot resolves each row's translations from the L10n corpus on e
 </nowiki></pre>
 
 == Field notes ==
-* '''Primary key is <code>(type, subtype, variant)</code>''' as a tuple. <code>variant</code> is sparse — it's set for sub-row terms (<code>type='law_level'</code>, <code>type='skill_level'</code>) where the same <code>(type, subtype)</code> pair needs to disambiguate per-level rows, and left unset for everything else. Joins from per-unit columns include the type discriminator: e.g. <code>UnitDef.attack_type</code> joins to <code>EntryDef.subtype WHERE EntryDef.type='attack_archetype'</code>.
-* '''<code>variant</code>''' carries sub-row indices for rows that fold per-(entity, level) data into this table — currently <code>type='law_level'</code> and <code>type='skill_level'</code>. String-typed so it can hold either integer levels (<code>"1"</code>, <code>"2"</code>, <code>"3"</code>) or freeform variant codes if future sub-rows need them.
+* '''Primary key is <code>(type, subtype, variant)</code>''' as a tuple. <code>variant</code> is the optional third key tier — sparse, and not used by any Entry type that currently ships (it's kept on the stub for uniformity with the shared key pyramid). Joins from per-unit columns include the type discriminator: e.g. <code>UnitDef.attack_type</code> joins to <code>EntryDef.subtype WHERE EntryDef.type='attack_archetype'</code>.
+* '''<code>variant</code>''' is String-typed so it can hold either integer indices or freeform variant codes should a future Entry type need a third key tier. Per-(entity, level) data — law levels, skill levels, spell ranks — does '''not''' fold into Entry; those are per-level rows of real parent entities and live in their own structural tables ([[Template:LawLevelDef|LawLevel]], [[Template:SkillLevelDef|SkillLevel]], [[Template:SpellRankDef|SpellRank]]) with translations keyed by <code>target_id</code> + <code>variant</code> in the [[Template:TranslationDef|Translation]] table.
 * '''All display text is in [[Template:TranslationDef|Translation]]''', not here. To get the English label for an Entry term: <code>Translation.name WHERE type='<type>' AND subtype='<subtype>' AND variant='<variant>' AND language='en'</code>. Other languages swap the <code>language</code> filter.
 * '''<code>icon</code>''' is optional. Sparse-emit: if a seed has no icon configured, the field is omitted from the row.
 * '''<code>name_sid</code> / <code>desc_sid</code> / <code>narrative_description_sid</code>''' are surfaced for traceability — they point at the L10n entries the row was sourced from. Useful for "find which game string drives this label" queries, but they are not the join path to translations.

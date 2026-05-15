@@ -128,11 +128,11 @@ def test_render_index_page_emits_blurb_and_sorted_bullets() -> None:
     assert "== Pages (3) ==" in page
     # Sorted alphabetically.
     bullets_section = page.split("== Pages (3) ==")[1]
-    angel_idx = bullets_section.index("Data:Unit/angel\n")  # plain angel, not _upg
+    angel_idx = bullets_section.index("Data:Unit/angel]]")  # plain angel, not _upg
     angel_upg_idx = bullets_section.index("Data:Unit/angel_upg")
     imp_idx = bullets_section.index("Data:Unit/imp")
     assert angel_idx < angel_upg_idx < imp_idx
-    assert "[[Category:Data]]" in page
+    assert "[[Category:Game Data Indices]]" in page
 
 
 def test_render_index_page_converts_markdown_backticks_to_code_tags() -> None:

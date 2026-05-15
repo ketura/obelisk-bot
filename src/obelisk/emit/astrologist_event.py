@@ -11,10 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from obelisk.emit.cargo import render_call
-from obelisk.emit.unit import (
-    _lookup_text,
-    render_translation_block,
-)
+from obelisk.emit.unit import render_translation_block
 from obelisk.models.astrologist_event import AstrologistEventRecord
 from obelisk.models.localization import LocalizationCorpus
 from obelisk.resolve import PlaceholderResolver
@@ -22,8 +19,8 @@ from obelisk.resolve import PlaceholderResolver
 
 _ASTROLOGIST_EVENT_FIELD_ORDER: tuple[str, ...] = (
     "id", "category",
-    "name", "name_sid",
-    "description", "desc_sid",
+    "name_sid",
+    "desc_sid",
     "icon",
     "buff_sid",
     "roll_chance", "count_to_return",
@@ -37,22 +34,10 @@ def emit_astrologist_event_page(
     resolver: PlaceholderResolver | None = None,
 ) -> str:
     """Render ``Data:AstrologistEvent/<id>``."""
-    en_name = _lookup_text(
-        event.name_sid, "english", corpus, resolver, None, None,
-    )
-    en_desc = (
-        _lookup_text(
-            event.desc_sid, "english", corpus, resolver, None, None,
-        )
-        if event.desc_sid else None
-    )
-
     main_params: dict[str, Any] = {
         "id": event.id,
         "category": event.category,
-        "name": en_name,
         "name_sid": event.name_sid,
-        "description": en_desc,
         "desc_sid": event.desc_sid,
         "icon": event.icon,
         "buff_sid": event.buff_sid,

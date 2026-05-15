@@ -90,6 +90,54 @@ the original entry:
   genuine issue is: ``Read`` shows the same problem the bash check
   does.
 
+**Update from the D-040 translation refactor** — a reliable workflow
+that beat the gremlin across a ~25-file change:
+
+- **The git object store is trustworthy; the working-tree mount is
+  not.** ``git archive HEAD`` and ``git show HEAD:<file>`` read from
+  content-addressed blobs and return byte-perfect committed content,
+  bypassing the mount entirely. ``cp`` / ``cat`` / ``dd`` / ``stat``
+  on a working-tree path all see the same stale/truncated/null-padded
+  view the mount is currently serving.
+
+- **Distinguish phantom truncations from real edits.** ``git status``
+  will flag mount-truncated files as "modified". To tell a gremlin
+  artifact from a genuine uncommitted change: a phantom truncation's
+  worktree content is a *strict prefix* of the HEAD blob (deletion-only
+  diff, worktree byte count < HEAD byte count). Check with
+  ``git show HEAD:<f>`` vs the worktree read — if ``HEAD.startswith
+  (worktree.rstrip())``, it's the gremlin.
+
+- **Un-stick a phantom-truncated file:** ``git show HEAD:<file> >
+  <file>`` — a full rewrite with identical content syncs both sides
+  and clears the bogus ``git status`` entry. Only safe once the
+  strict-prefix check confirms the file equals HEAD.
+
+- **Reliable test-mirror workflow.** Build a sandbox-native mirror
+  with ``git archive HEAD | tar -x -C <mirror>`` — gremlin-free by
+  construction. Edit + test there. For files already edited
+  Windows-side via the ``Edit`` tool, restore the pristine copy into
+  the mirror from ``git archive`` then re-apply the edits with a
+  Python ``str.replace`` script that asserts each anchor matches
+  *exactly once* — a transcription slip fails loudly instead of
+  silently corrupting. Sync the verified mirror back to the working
+  tree with ``cp`` (a full-file write, which syncs both sides); ``cp``
+  *from* a stale mount path just propagates the corruption, so the
+  direction matters.
+
+- **`cp` direction matters.** ``cp mirror→worktree`` works (writing a
+  good file through the mount syncs it). ``cp worktree→mirror`` is
+  unreliable (reading a possibly-stale file). Always copy *out of* the
+  trustworthy source.
+
+- **The offline test env.** ``.wheelhouse/linux-cp310`` lacks
+  ``exceptiongroup`` and ``tomli`` (pytest 9's py<3.11 deps) and PyPI
+  is firewalled. Minimal shims for both live in the session's
+  ``outputs/shims/`` — ``exceptiongroup`` is a faithful-enough
+  ``BaseExceptionGroup``/``ExceptionGroup`` backport, ``tomli``
+  re-exports ``pip._vendor.tomli``. Put that dir on ``PYTHONPATH``
+  alongside ``src`` and pytest 9.0.3 from the wheelhouse runs clean.
+
 ## Architectural patterns
 
 ### L10n SID family naming as schema discovery

@@ -479,7 +479,7 @@ def cmd_extract(
     difficulty_result = extract_difficulties(paths)
     n_difficulties = 0
     for diff in difficulty_result.difficulties:
-        page = emit_difficulty_page(diff)
+        page = emit_difficulty_page(diff, corpus, resolver=resolver)
         (difficulty_dir / f"{diff.id}.wiki.txt").write_text(with_import_category(page), encoding="utf-8")
         n_difficulties += 1
         total_chars += len(page)

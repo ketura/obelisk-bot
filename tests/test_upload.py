@@ -234,7 +234,7 @@ def test_throttle_sleeps_between_calls_when_rps_set(monkeypatch: pytest.MonkeyPa
     # "elapsed" between the first call's _last_call stamp and the
     # second call's pre-sleep timestamp). With rps=1.0 the throttle
     # wants 1.0s between calls -> it should sleep 0.9s.
-    ticks = iter([0.0, 0.1, 0.1, 0.2])
+    ticks = iter([0.0, 0.0, 0.1, 0.1])
     client = WikiClient(
         _config(requests_per_second=1.0),
         sleep=lambda s: sleeps.append(s),

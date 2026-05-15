@@ -23,11 +23,7 @@ from typing import Any
 
 from obelisk.emit.cargo import render_call
 from obelisk.emit.hero import render_bonus
-from obelisk.emit.unit import (
-    _lookup_text,
-    render_entry_block,
-    render_translation_block,
-)
+from obelisk.emit.unit import render_translation_block
 from obelisk.models.law import LawLevelRecord, LawRecord
 from obelisk.models.localization import LocalizationCorpus
 from obelisk.resolve import PlaceholderResolver
@@ -35,34 +31,25 @@ from obelisk.resolve import PlaceholderResolver
 
 _LAW_FIELD_ORDER: tuple[str, ...] = (
     "id", "faction", "ordinal", "tier",
-    "name", "name_sid", "desc_sid", "icon",
+    "name_sid", "desc_sid", "icon",
     "max_level", "test", "source_path",
 )
 
 _LAW_LEVEL_FIELD_ORDER: tuple[str, ...] = (
-    "law_id", "level", "cost", "description",
+    "law_id", "level", "cost",
 )
 
 
-def _render_level(
-    law: LawRecord,
-    level: LawLevelRecord,
-    corpus: LocalizationCorpus,
-    resolver: PlaceholderResolver | None,
-) -> str:
-    """Render one {{LawLevelDef | …}} row. Builds a per-level law_json
-    context (the parametersPerLevel[level-1] dict directly) so the
-    interpreter's CurrentFractionLawConfig op resolves
-    ``bonuses[N].parameters[M]`` reads against the right level."""
-    description = _lookup_text(
-        law.desc_sid, "english", corpus, resolver, None, None,
-        law_json=level.raw_json,
-    )
+def _render_level(law: LawRecord, level: LawLevelRecord) -> str:
+    """Render one ``{{LawLevelDef | …}}`` structural row.
+
+    The per-level description — the parent law's ``desc_sid`` resolved
+    against this level's bonus parameters — lives in the Translation
+    table; see ``_render_level_translation``."""
     params: dict[str, Any] = {
         "law_id": law.id,
         "level": level.level,
         "cost": level.cost,
-        "description": description,
     }
     return render_call("LawLevelDef", params, key_order=_LAW_LEVEL_FIELD_ORDER)
 
@@ -73,21 +60,22 @@ def _render_level_translation(
     corpus: LocalizationCorpus,
     resolver: PlaceholderResolver | None,
 ) -> str:
-    """Per-(law, level) translation row carrying the description in
-    the 15 non-English locales. English description sits on the
-    parent ``LawLevelDef.description`` column.
+    """Per-(law, level) Translation rows carrying the level's
+    description in every language (English included).
 
-    Emits an ``EntryDef`` row with ``(type='law_level', subtype=law_id,
-    variant=level)``. Law levels have no name SID — only the
-    description varies per level — so name_sid stays unset.
+    Per D-040: emits ``{{TranslationDef | type='law_level'}}`` rows
+    keyed by ``target_id=<law_id>`` + ``variant=<level>``. The text is
+    the parent law's ``desc_sid`` resolved against this level's bonus
+    parameters (via ``law_json``). Law levels have no name — only the
+    description varies per level.
 
-    Returns the empty string if the law has no desc_sid (no
-    translations to emit)."""
+    Returns the empty string if the law has no desc_sid (nothing to
+    localize)."""
     if not law.desc_sid:
         return ""
-    return render_entry_block(
-        entry_type="law_level",
-        subtype=law.id,
+    return render_translation_block(
+        translation_type="law_level",
+        target_id=law.id,
         name_sid=None,
         desc_sid=law.desc_sid,
         corpus=corpus,
@@ -107,17 +95,12 @@ def emit_law_page(
     # context for the name lookup (most law names are placeholder-free
     # anyway; the context is harmless for those that aren't).
     first_level_json = law.levels[0].raw_json if law.levels else None
-    en_name = _lookup_text(
-        law.name_sid, "english", corpus, resolver, None, None,
-        law_json=first_level_json,
-    )
 
     main_params: dict[str, Any] = {
         "id": law.id,
         "faction": law.faction,
         "ordinal": law.ordinal,
         "tier": law.tier,
-        "name": en_name,
         "name_sid": law.name_sid,
         "desc_sid": law.desc_sid,
         "icon": law.icon,
@@ -150,7 +133,7 @@ def emit_law_page(
     # (nothing to localize), which lets emit treat the absence as
     # sparse rather than emitting an empty stub.
     for level in law.levels:
-        blocks.append(_render_level(law, level, corpus, resolver))
+        blocks.append(_render_level(law, level))
         xlat = _render_level_translation(law, level, corpus, resolver)
         if xlat:
             blocks.append(xlat)

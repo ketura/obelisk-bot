@@ -12,8 +12,9 @@ into one of two layouts:
 
 Cargo row ids stay granular (``<faction>_<sid>_L<level>``) — only
 the *page* hosting them is consolidated. Each Building row carries
-its own matching ``{{Translation | type=building |
-target_id=<id>}}`` block.
+its own matching ``{{TranslationDef | type=building |
+target_id=<id>}}`` block, plus a ``type=building_narrative`` block
+when a narrative SID exists (D-040 multi-type pattern).
 
 Building description SIDs reference scripts in
 ``info_city/city_building.script`` which are pure
@@ -27,10 +28,7 @@ from __future__ import annotations
 from typing import Any, Iterable
 
 from obelisk.emit.cargo import render_call
-from obelisk.emit.unit import (
-    _lookup_text,
-    render_translation_block,
-)
+from obelisk.emit.unit import render_translation_block
 from obelisk.models.building import BuildingRecord
 from obelisk.models.localization import LocalizationCorpus
 from obelisk.resolve import PlaceholderResolver
@@ -38,9 +36,9 @@ from obelisk.resolve import PlaceholderResolver
 
 _BUILDING_FIELD_ORDER: tuple[str, ...] = (
     "id", "faction", "category", "sid", "level",
-    "name", "name_sid",
-    "description", "desc_sid",
-    "narrative_description", "narrative_desc_sid",
+    "name_sid",
+    "desc_sid",
+    "narrative_desc_sid",
     "icon", "background_image",
     "is_constructed_on_start", "level_on_start", "scene_slot",
     "node_pos_x", "node_pos_y",
@@ -56,33 +54,23 @@ def _render_one_building(
     building: BuildingRecord,
     corpus: LocalizationCorpus,
     resolver: PlaceholderResolver | None,
-) -> tuple[str, str | None]:
-    """Render one Building row + its matching Translation row.
+) -> str:
+    """Render one Building row plus its Translation rows.
 
-    Returns a (building_block, translation_block_or_None) pair.
-    Caller stitches them into the page however it likes.
+    Returns the ``{{BuildingDef}}`` row followed by the per-language
+    ``{{TranslationDef}}`` blocks — ``type='building'`` (name +
+    description) and, when a narrative SID exists,
+    ``type='building_narrative'`` (narrative text in the description
+    column).
     """
-    en_name = _lookup_text(
-        building.name_sid, "english", corpus, resolver, None, None,
-    )
-    en_desc = _lookup_text(
-        building.desc_sid, "english", corpus, resolver, None, None,
-    )
-    en_narr = _lookup_text(
-        building.narrative_desc_sid, "english", corpus, resolver, None, None,
-    ) if building.narrative_desc_sid else None
-
     main_params: dict[str, Any] = {
         "id": building.id,
         "faction": building.faction,
         "category": building.category,
         "sid": building.sid,
         "level": building.level,
-        "name": en_name,
         "name_sid": building.name_sid,
-        "description": en_desc,
         "desc_sid": building.desc_sid or None,
-        "narrative_description": en_narr,
         "narrative_desc_sid": building.narrative_desc_sid,
         "icon": building.icon,
         "background_image": building.background_image,
@@ -104,9 +92,9 @@ def _render_one_building(
         "units_weekly": building.units_weekly,
         "source_path": building.source_path,
     }
-    building_block = render_call(
-        "BuildingDef", main_params, key_order=_BUILDING_FIELD_ORDER,
-    )
+    blocks: list[str] = [
+        render_call("BuildingDef", main_params, key_order=_BUILDING_FIELD_ORDER),
+    ]
     xlat = render_translation_block(
         translation_type="building",
         target_id=building.id,
@@ -115,7 +103,20 @@ def _render_one_building(
         corpus=corpus,
         resolver=resolver,
     )
-    return building_block, (xlat or None)
+    if xlat:
+        blocks.append(xlat)
+    if building.narrative_desc_sid:
+        narr = render_translation_block(
+            translation_type="building_narrative",
+            target_id=building.id,
+            name_sid=None,
+            desc_sid=building.narrative_desc_sid,
+            corpus=corpus,
+            resolver=resolver,
+        )
+        if narr:
+            blocks.append(narr)
+    return "\n\n".join(blocks)
 
 
 def emit_building_page(
@@ -134,13 +135,10 @@ def emit_buildings_group_page(
 ) -> str:
     """Render a multi-Building page. The Building list determines what
     rows the page carries, in source order. Each row gets its own
-    ``{{Building}}`` + ``{{Translation}}`` block."""
+    ``{{BuildingDef}}`` + ``{{TranslationDef}}`` block(s)."""
     blocks: list[str] = [
         "<!-- Bot-managed page. Edit the source in obelisk-bot, not here. -->",
     ]
     for b in buildings:
-        bblock, xblock = _render_one_building(b, corpus, resolver)
-        blocks.append(bblock)
-        if xblock:
-            blocks.append(xblock)
+        blocks.append(_render_one_building(b, corpus, resolver))
     return "\n\n".join(blocks) + "\n"

@@ -24,11 +24,7 @@ from typing import Any, Iterable
 
 from obelisk.emit.cargo import render_call
 from obelisk.emit.hero import render_bonus
-from obelisk.emit.unit import (
-    _lookup_text,
-    render_entry_block,
-    render_translation_block,
-)
+from obelisk.emit.unit import render_translation_block
 from obelisk.models.localization import LocalizationCorpus
 from obelisk.models.skill import SkillLevelRecord, SkillRecord, SubSkillRecord
 from obelisk.resolve import PlaceholderResolver
@@ -36,24 +32,24 @@ from obelisk.resolve import PlaceholderResolver
 
 _SKILL_FIELD_ORDER: tuple[str, ...] = (
     "id", "variant", "skill_type", "is_pseudo",
-    "name", "name_sid",
-    "description", "desc_sid",
+    "name_sid",
+    "desc_sid",
     "max_level",
     "source_path",
 )
 
 _SKILL_LEVEL_FIELD_ORDER: tuple[str, ...] = (
     "skill_id", "level",
-    "name", "name_sid",
-    "description", "desc_sid",
+    "name_sid",
+    "desc_sid",
     "icon",
     "offered_sub_skills",
 )
 
 _SUB_SKILL_FIELD_ORDER: tuple[str, ...] = (
     "id", "variant", "parent_skill_id",
-    "name", "name_sid",
-    "description", "desc_sid",
+    "name_sid",
+    "desc_sid",
     "icon",
     "source_path",
 )
@@ -73,27 +69,12 @@ def _render_skill_main(
     per-level descriptions on each {{SkillLevel}} row carry the right
     level-specific values).
     """
-    first_level_json = skill.levels[0].raw_json if skill.levels else None
-    first_level = skill.levels[0].level if skill.levels else None
-    en_name = _lookup_text(
-        skill.name_sid, "english", corpus, resolver, None, None,
-        skill_json=first_level_json, skill_level=first_level,
-    )
-    en_desc = (
-        _lookup_text(
-            skill.desc_sid, "english", corpus, resolver, None, None,
-            skill_json=first_level_json, skill_level=first_level,
-        )
-        if skill.desc_sid else None
-    )
     params: dict[str, Any] = {
         "id": skill.id,
         "variant": skill.variant,
         "skill_type": skill.skill_type,
         "is_pseudo": skill.is_pseudo,
-        "name": en_name,
         "name_sid": skill.name_sid,
-        "description": en_desc,
         "desc_sid": skill.desc_sid,
         "max_level": len(skill.levels),
         "source_path": skill.source_path,
@@ -106,26 +87,10 @@ def _render_skill_level(
     corpus: LocalizationCorpus,
     resolver: PlaceholderResolver | None,
 ) -> str:
-    en_name = (
-        _lookup_text(
-            level.name_sid, "english", corpus, resolver, None, None,
-            skill_json=level.raw_json, skill_level=level.level,
-        )
-        if level.name_sid else None
-    )
-    en_desc = (
-        _lookup_text(
-            level.desc_sid, "english", corpus, resolver, None, None,
-            skill_json=level.raw_json, skill_level=level.level,
-        )
-        if level.desc_sid else None
-    )
     params: dict[str, Any] = {
         "skill_id": level.skill_id,
         "level": level.level,
-        "name": en_name,
         "name_sid": level.name_sid,
-        "description": en_desc,
         "desc_sid": level.desc_sid,
         "icon": level.icon,
         "offered_sub_skills": (
@@ -140,19 +105,19 @@ def _render_skill_level_translation(
     corpus: LocalizationCorpus,
     resolver: PlaceholderResolver | None,
 ) -> str:
-    """Per-(skill, level) translation row carrying non-English
-    name + desc when the level has its own override. English defaults
-    sit on ``SkillLevelDef.name`` / ``.desc``.
+    """Per-(skill, level) Translation rows for a level's name/desc
+    override, in every language (English included).
 
-    Emits an ``EntryDef`` row with ``(type='skill_level',
-    subtype=skill_id, variant=level)``. Sparse — returns the empty
-    string when the level has neither a name nor a desc SID (the
-    common case: most levels inherit from the parent skill)."""
+    Per D-040: emits ``{{TranslationDef | type='skill_level'}}`` rows
+    keyed by ``target_id=<skill_id>`` + ``variant=<level>``. Sparse —
+    returns the empty string when the level has neither a name nor a
+    desc SID (the common case: most levels inherit the parent skill's
+    display fields)."""
     if not level.name_sid and not level.desc_sid:
         return ""
-    return render_entry_block(
-        entry_type="skill_level",
-        subtype=level.skill_id,
+    return render_translation_block(
+        translation_type="skill_level",
+        target_id=level.skill_id,
         name_sid=level.name_sid,
         desc_sid=level.desc_sid,
         corpus=corpus,
@@ -173,24 +138,11 @@ def _render_sub_skill(
     Threads the sub-skill's raw JSON as ``sub_skill_json`` so the
     interpreter's ``CurrentSubSkill`` op can resolve per-bonus
     placeholders in the description."""
-    en_name = _lookup_text(
-        sub.name_sid, "english", corpus, resolver, None, None,
-        sub_skill_json=sub.raw_json,
-    )
-    en_desc = (
-        _lookup_text(
-            sub.desc_sid, "english", corpus, resolver, None, None,
-            sub_skill_json=sub.raw_json,
-        )
-        if sub.desc_sid else None
-    )
     params: dict[str, Any] = {
         "id": sub.id,
         "variant": sub.variant,
         "parent_skill_id": sub.parent_skill_id,
-        "name": en_name,
         "name_sid": sub.name_sid,
-        "description": en_desc,
         "desc_sid": sub.desc_sid,
         "icon": sub.icon,
         "source_path": sub.source_path,
