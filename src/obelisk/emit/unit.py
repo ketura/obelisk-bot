@@ -399,6 +399,15 @@ ENTRY_SEEDS: dict[str, dict[str, dict[str, Any]]] = {
     # subtype to match the underlying enum.
     # ----------------------------------------------------------------
     "unit_stat": {
+        # Note: the HP SID doesn't follow the unitStat_* family
+        # naming (it's just ``unit_health``, in ui.json). Subtype key
+        # is ``hp`` to match the UnitDef cargo column.
+        "hp": {
+            "name_sid": "unit_health",
+            "desc_sid": "unit_health_description_detailed",
+            "display_name_fallback": "Health",
+            "source_path": "Lang/english/texts/ui.json",
+        },
         "offence": {
             "name_sid": "unitStat_offence",
             "desc_sid": "unitStat_offence_description",
@@ -439,6 +448,63 @@ ENTRY_SEEDS: dict[str, dict[str, dict[str, Any]]] = {
             "name_sid": "unitStat_initiative",
             "desc_sid": "unitStat_initiative_description_detailed",
             "display_name_fallback": "Initiative",
+            "source_path": "Lang/english/texts/ui.json",
+        },
+    },
+
+    # ----------------------------------------------------------------
+    # UI chrome labels — section headers and generic labels for wiki
+    # templates (HeroInfoBox, UnitInfoBox, ...). Translated by querying
+    # ``Translation WHERE type='ui' AND subtype=<key>``. Add a
+    # subtype here when a wiki template needs a translated chrome
+    # string AND a matching SID exists in the game's L10n corpus; if
+    # no game SID exists for the concept (e.g. "Class", "Internal ID"),
+    # the wiki provides the translation in its own per-language label
+    # template, not here. Unlike hero_stat/unit_stat, these have no
+    # desc_sid — they're just words.
+    # ----------------------------------------------------------------
+    "ui": {
+        "faction": {
+            "name_sid": "fractions",
+            "display_name_fallback": "Faction",
+            "source_path": "Lang/english/texts/menu.json",
+        },
+        "starting_skills": {
+            "name_sid": "lobby_skills",
+            "display_name_fallback": "Starting Skills",
+            "source_path": "Lang/english/texts/menu.json",
+        },
+        "starting_spells": {
+            "name_sid": "lobby_spells",
+            "display_name_fallback": "Starting Spells",
+            "source_path": "Lang/english/texts/menu.json",
+        },
+        "starting_army": {
+            "name_sid": "lobby_units",
+            "display_name_fallback": "Starting Army",
+            "source_path": "Lang/english/texts/menu.json",
+        },
+        "biography": {
+            "name_sid": "hero_window_ui_narrative",
+            "display_name_fallback": "Biography",
+            "source_path": "Lang/english/texts/ui.json",
+        },
+        "level": {
+            "name_sid": "loc_level",
+            "display_name_fallback": "Level",
+            "source_path": "Lang/english/texts/cities.json",
+        },
+        "experience": {
+            "name_sid": "hero_exp_name",
+            "display_name_fallback": "Experience",
+            "source_path": "Lang/english/texts/ui.json",
+        },
+        # 'stats' is the wiki-side key; the in-game SID resolves to
+        # "Attributes" (and translations thereof) — see the note on
+        # ``display_name_fallback`` matching the resolved corpus text.
+        "stats": {
+            "name_sid": "hero_stats_reward_name",
+            "display_name_fallback": "Attributes",
             "source_path": "Lang/english/texts/ui.json",
         },
     },
@@ -615,9 +681,13 @@ def render_entry_block(
 
     Per D-040: emits a thin ``{{EntryDef}}`` structural stub followed
     by the per-language ``{{TranslationDef}}`` rows for this Entry's
-    display text — keyed by ``(type, subtype, variant)`` with an empty
-    ``target_id`` (catch-all rows aren't keyed to an entity id). When
-    ``narrative_desc_sid`` is set, an additional
+    display text — keyed by ``(type, subtype, variant)``. The Entry
+    primary-key tuple is ``(type, subtype, variant)``, but the
+    Translation rows duplicate ``subtype`` into ``target_id`` so the
+    join column is uniformly non-null (an empty target_id stores as
+    NULL in Cargo, and ``NULL = NULL`` doesn't match in a join — so
+    leaving it blank silently breaks query-side self-joins across
+    languages). When ``narrative_desc_sid`` is set, an additional
     ``type='<entry_type>_narrative'`` Translation block carries the
     narrative text in the ``description`` column — the same multi-type
     pattern artifacts / buildings / map objects use.
@@ -638,7 +708,7 @@ def render_entry_block(
 
     xlat = render_translation_block(
         translation_type=entry_type,
-        target_id="",
+        target_id=subtype,
         name_sid=name_sid,
         desc_sid=desc_sid,
         corpus=corpus,
@@ -658,7 +728,7 @@ def render_entry_block(
     if narrative_desc_sid:
         narr_xlat = render_translation_block(
             translation_type=f"{entry_type}_narrative",
-            target_id="",
+            target_id=subtype,
             name_sid=None,
             desc_sid=narrative_desc_sid,
             corpus=corpus,
@@ -735,7 +805,7 @@ def emit_entry_page_from_seed(
         entry_type=entry_type,
         subtype=subtype,
         name_sid=seed["name_sid"],
-        desc_sid=seed["desc_sid"],
+        desc_sid=seed.get("desc_sid"),
         corpus=corpus,
         resolver=resolver,
         display_name_fallback=seed.get("display_name_fallback"),

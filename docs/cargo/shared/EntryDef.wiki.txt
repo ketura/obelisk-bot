@@ -18,7 +18,7 @@ In both cases the bot resolves each row's translations from the L10n corpus on e
 
 == Schema ==
 {{#cargo_declare:_table=Entry
-| type = String (allowed values=attack_archetype,movement,creature_type,FactionCityName,resource,hero_stat,unit_stat)
+| type = String (allowed values=attack_archetype,movement,creature_type,FactionCityName,resource,hero_stat,unit_stat,ui)
 | subtype = String
 | variant = String
 | icon = String
@@ -30,7 +30,7 @@ In both cases the bot resolves each row's translations from the L10n corpus on e
 
 <pre><nowiki>
 {{EntryDef
-| type = String (allowed values=attack_archetype,movement,creature_type,FactionCityName,resource,hero_stat,unit_stat)
+| type = String (allowed values=attack_archetype,movement,creature_type,FactionCityName,resource,hero_stat,unit_stat,ui)
 | subtype = String
 | variant = String                            <!-- optional third key component for sub-row variants (level/rank); sparse -->
 | icon = String

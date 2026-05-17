@@ -51,6 +51,7 @@ DIR_TO_WIKI_TABLE: dict[str, str] = {
     "resource": "Resource",
     "hero_stat": "HeroStat",
     "unit_stat": "UnitStat",
+    "ui": "UI",
 }
 
 # Back-compat alias for code that still uses the private name.

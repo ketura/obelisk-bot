@@ -17,7 +17,7 @@ The bot never extracts <code>TranslationDef</code> rows on their own; each paren
 
 <pre><nowiki>
 {{TranslationDef
-| target_id = String         <!-- the parent entity's id (Unit.id, Faction.id, …); empty for catch-all rows keyed by subtype -->
+| target_id = String         <!-- the parent entity's id (Unit.id, Faction.id, …); for catch-all Entry rows (attack_archetype, ui, …) duplicates subtype so the join column is uniformly non-null -->
 | type = String              <!-- e.g. unit, faction, hero, attack_archetype, spell_rank -->
 | subtype = String           <!-- secondary key component; sparse -->
 | variant = String           <!-- tertiary key component; sparse -->
@@ -29,7 +29,7 @@ The bot never extracts <code>TranslationDef</code> rows on their own; each paren
 </nowiki></pre>
 
 == Field notes ==
-* '''Primary key is <code>(target_id, type, subtype, variant, language)</code>''' as a tuple. <code>type</code> / <code>subtype</code> / <code>variant</code> are tiers of the same discriminator pyramid; <code>target_id</code> is the entity id and ''usually'' pairs with a <code>type</code>, but that coupling isn't enforced by the architecture. Most entities use only <code>target_id</code> + <code>type</code>; catch-all reference rows (the ones that used to live on <code>Entry</code>) use <code>type</code> + <code>subtype</code> + <code>variant</code> and leave <code>target_id</code> empty; per-level rows (spell ranks, law levels, skill levels) carry the level in <code>variant</code>.
+* '''Primary key is <code>(target_id, type, subtype, variant, language)</code>''' as a tuple. <code>type</code> / <code>subtype</code> / <code>variant</code> are tiers of the same discriminator pyramid; <code>target_id</code> is the entity id and ''usually'' pairs with a <code>type</code>, but that coupling isn't enforced by the architecture. Most entities use only <code>target_id</code> + <code>type</code>; catch-all [[Template:EntryDef|Entry]] rows are identified by <code>(type, subtype, variant)</code> conceptually, but the emitter duplicates <code>subtype</code> into <code>target_id</code> so self-joins across languages work uniformly (Cargo stores blank parameter values as SQL <code>NULL</code>, and <code>NULL = NULL</code> doesn't match in a join); per-level rows (spell ranks, law levels, skill levels) carry the level in <code>variant</code>.
 * '''Joins from parent entities''' include the type discriminator and the language filter, e.g. <code>Unit.id = Translation.target_id WHERE Translation.type='unit' AND Translation.language='{{{lang|en}}}'</code>.
 * '''English is in this table''' as <code>language=en</code> — it is not a special case. Parent entity tables no longer carry inline English <code>name</code>/<code>description</code> columns; all display text for every language comes from here.
 * '''<code>name</code> is <code>String</code>, <code>description</code>/<code>bonus_description</code> are <code>Wikitext</code>''' — descriptions may carry HTML-bold/italic from the L10n corpus, which the bot's resolver converts to wiki markup (<code>'''</code> / <code>''</code>) before storing. Names are plain.
@@ -57,7 +57,7 @@ How different parent shapes map onto the key tiers:
 |-
 | Spell rank || <code>Spell.id</code> || <code>spell_rank</code> || || <code>level</code> (1-4)
 |-
-| Attack archetype || || <code>attack_archetype</code> || <code>melee</code> / <code>ranged</code> / … ||
+| Attack archetype || <code>melee</code> / <code>ranged</code> / … (= subtype) || <code>attack_archetype</code> || <code>melee</code> / <code>ranged</code> / … ||
 |-
 | Law level || <code>Law.id</code> || <code>law_level</code> || || <code>level</code>
 |}
