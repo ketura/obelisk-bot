@@ -111,12 +111,53 @@ The INI also carries throttle settings: `requests_per_second` (client-side sleep
 
 ## Install
 
+If you have [uv](https://github.com/astral-sh/uv) installed (Linux / macOS / Windows):
+
 ```sh
 uv venv
 uv pip install -e ".[dev]"
 ```
 
-The CLI is installed as `obelisk` (and is also runnable via `python -m obelisk.cli`).
+Without uv, use the stdlib `venv` module and pip. Pick the block matching your shell.
+
+**Windows PowerShell** (first-time setup):
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -e ".[dev]"
+```
+
+If `Activate.ps1` is blocked with an execution-policy error, run this once per user (a one-time fix — Windows defaults to restricting unsigned scripts, and venv activators ship unsigned):
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+```
+
+To re-enter the venv on subsequent sessions, just activate — no reinstall:
+
+```powershell
+cd <path>\obelisk-bot
+.\.venv\Scripts\Activate.ps1
+```
+
+**Windows cmd.exe**:
+
+```bat
+python -m venv .venv
+.venv\Scripts\activate.bat
+pip install -e ".[dev]"
+```
+
+**Linux / macOS**:
+
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+The CLI is installed as `obelisk` (and is also runnable via `python -m obelisk.cli`). Once the venv is activated, the project's prompt prefixes with `(.venv)` and `obelisk --help` should work from anywhere inside the repo.
 
 ## License
 
