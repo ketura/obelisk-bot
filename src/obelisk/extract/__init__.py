@@ -17,6 +17,7 @@ from obelisk.extract.law import extract_laws
 from obelisk.extract.map_object import extract_map_objects
 from obelisk.extract.resource import extract_resources
 from obelisk.extract.skill import extract_skills
+from obelisk.extract.skill_roll import extract_skill_rolls
 from obelisk.extract.spell import extract_spells
 from obelisk.extract.loader import (
     CorePaths,
@@ -51,6 +52,7 @@ __all__ = [
     "extract_laws",
     "extract_map_objects",
     "extract_resources",
+    "extract_skill_rolls",
     "extract_skills",
     "extract_spells",
     "extract_units",

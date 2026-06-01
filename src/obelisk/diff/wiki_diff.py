@@ -43,6 +43,10 @@ DIR_TO_WIKI_TABLE: dict[str, str] = {
     "buildings": "Building",
     "map_objects": "MapObject",
     "skills": "Skill",
+    "skill_roll_tables": "SkillRollTable",
+    "skill_roll_bands": "SkillRollBand",
+    "stat_bonus_rolls": "StatBonusRoll",
+    "skill_roll_replacements": "SkillRollReplacement",
     "astrologist_events": "AstrologistEvent",
     "difficulties": "Difficulty",
     "attack_archetype": "AttackArchetype",
@@ -224,12 +228,24 @@ def _list_pages(emit_dir: Path) -> dict[str, Path]:
 
     Restricting to the data root keeps diff artifacts (which may live in
     sibling subfolders inside the same emit dir) out of the comparison.
+
+    On a case-insensitive filesystem (Windows) ``emit_dir / "data"`` and
+    ``emit_dir / "Data"`` open the *same* physical directory, so walking
+    both would list — and the manifest would later upload — every page
+    twice. Dedup by inode identity (``st_dev``, ``st_ino``); note that
+    ``Path.resolve()`` does NOT case-fold and so does not catch this.
     """
     out: dict[str, Path] = {}
+    seen: set[tuple[int, int]] = set()
     for root_name in ("data", "Data"):
         data_dir = emit_dir / root_name
         if not data_dir.is_dir():
             continue
+        st = data_dir.stat()
+        key = (st.st_dev, st.st_ino)
+        if key in seen:
+            continue
+        seen.add(key)
         for fp in data_dir.rglob("*.wiki.txt"):
             rel = fp.relative_to(emit_dir).as_posix()
             out[rel] = fp

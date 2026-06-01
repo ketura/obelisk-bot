@@ -28,18 +28,19 @@ When a new patch drops:
 obelisk extract ../2026-03-15
 obelisk extract ../2026-04-30
 
-# 3. Diff the two by label. Output: out/<new>/diff_vs_<old>/
-#    Review wiki_summary.md, patch_article.wiki.txt, json_diff.txt.
+# 3. Diff the two by label. Writes the upload manifest to
+#    out/<new>/manifest.json; other artifacts to out/<new>/diff_vs_<old>/.
+#    Review wiki_summary.md, patch_article.wiki.txt, the .diff files.
 #    Hand-edit the patch article if you want.
 obelisk diff 2026-03-15 2026-04-30
 
-# 4. Push when satisfied.
-obelisk upload 2026-03-15 2026-04-30
+# 4. Push when satisfied. One arg — the new label.
+obelisk upload 2026-04-30
 ```
 
 `diff` finds both extracts under `out/`. The `_meta.json` written by `extract` records the source patch path, so the deep core-JSON diff works automatically as long as both source patch dirs are still on disk.
 
-`upload` reads `manifest.json` from the diff folder and pushes each listed page plus the patch article. Idempotent — pages whose on-wiki text already matches are skipped. Pass `--dry-run` to preview the push list without contacting the wiki. Hand-edits to `patch_article.wiki.txt` made between diff and upload are picked up.
+`upload` reads `out/<label>/manifest.json` and pushes each listed page plus the patch article. The manifest path is the same one `obelisk generate` uses, so `upload` takes a single label regardless of whether the manifest came from `diff` or `generate`; a fresh `diff` replaces any manifest already at that path. Idempotent — pages whose on-wiki text already matches are skipped. Pass `--dry-run` to preview the push list without contacting the wiki. Hand-edits to `patch_article.wiki.txt` made between diff and upload are picked up.
 
 ## Initial population (or any full re-sync)
 
@@ -54,17 +55,16 @@ obelisk upload 2026-05-08                # push everything (idempotent, throttle
 
 `generate` walks `out/<label>/data/` and writes a flat `manifest.json` next to it (overwriting any previous). Every entry is `status="added"`. By default `coverage.wiki.txt` is included as `Data:Coverage` — pass `--no-coverage` to skip it.
 
-`upload <label>` (one arg) reads the flat manifest; `upload <old> <new>` (two args) reads the diff manifest. Both modes are idempotent and write `upload_log.jsonl` + `upload_errors.txt` (on failure) next to the manifest.
+`upload <label>` reads `out/<label>/manifest.json` — whether that manifest was written by `generate` (full push) or `diff` (patch push). It's idempotent and writes `upload_log.jsonl` + `upload_errors.txt` (on failure) next to the manifest.
 
 ## All commands
 
 ```sh
 # Top-level (routine use)
 obelisk extract <patch>                       # extract+emit a patch dump
-obelisk diff <old_label> <new_label>          # diff two extracts (writes manifest.json)
-obelisk generate <label>                      # write a full-push manifest for one extract
-obelisk upload <new_label>                    # push the full manifest
-obelisk upload <old_label> <new_label>        # push the diff manifest
+obelisk diff <old_label> <new_label>          # diff two extracts -> out/<new>/manifest.json
+obelisk generate <label>                      # write a full-push manifest -> out/<label>/manifest.json
+obelisk upload <label>                        # push out/<label>/manifest.json
 
 # Diagnostics
 obelisk render-unit <patch> <unit_id>         # render one unit's wikitext to stdout
@@ -88,18 +88,17 @@ out/
     data/<type>/_index.wiki.txt    per-namespace index page (-> Data:<Table>)
     audit.json                     logic-vs-views audit report
     _meta.json                     source patch path + timestamps
-    manifest.json                  full-push manifest (from `obelisk generate`)
+    manifest.json                  upload manifest (from `obelisk generate` OR `obelisk diff`)
     upload_log.jsonl               per-result log from the most recent real upload
     upload_log.dryrun.jsonl        per-entry log from the most recent `--dry-run`
     upload_errors.txt              failures from the most recent real run (if any)
-    diff_vs_<other_label>/         diffs live under the newer extract
+    diff_vs_<other_label>/         diff artifacts live under the newer extract
       changed_pages/<id>.diff      per-page unified diff
       wiki_summary.md              operator markdown summary
       patch_article.wiki.txt       body for Data:Patches/<label>  (hand-editable)
-      manifest.json                diff-push manifest (from `obelisk diff`)
-      upload_log.jsonl             per-result log when this manifest was uploaded
-      upload_log.dryrun.jsonl      per-entry log from a `--dry-run` against this manifest
-      upload_errors.txt            failures from the most recent real run (if any)
+      complete.diff                deep core-JSON diff, non-Lang
+      localization.diff            deep core-JSON diff, Lang/ only
+      (the upload manifest is NOT here — it goes to out/<label>/manifest.json)
       complete.diff                deep core-JSON diff, non-Lang
       localization.diff            deep core-JSON diff, Lang/ only
 ```

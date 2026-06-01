@@ -8,7 +8,7 @@ This pivot from one-row-per-slot to one-row-per-unit landed because (a) "list th
 == Schema ==
 {{#cargo_declare:_table=UnitAttack
 | unit_id = String
-| default_attack_type = String (allowed values=melee,ranged,reach)
+| default_attack_type = String (allowed values=melee_attack,melee_attack_no_counter,ranged_attack,ranged_attack_no_range,ranged_attack_no_close,ranged_attack_no_range_close,remote_attack,remote_attack_penalty)
 | default_pattern_sid = String
 | default_passive = String
 | default_stat_dmg_mult = Float
@@ -22,7 +22,7 @@ This pivot from one-row-per-slot to one-row-per-unit landed because (a) "list th
 | default_is_armed_ability = Boolean
 | default_temp_self_buff = String
 | default_dont_trigger_energy_regen = Boolean
-| counter_attack_type = String (allowed values=melee,ranged,reach)
+| counter_attack_type = String (allowed values=melee_attack,melee_attack_no_counter,ranged_attack,ranged_attack_no_range,ranged_attack_no_close,ranged_attack_no_range_close,remote_attack,remote_attack_penalty)
 | counter_pattern_sid = String
 | counter_passive = String
 | counter_stat_dmg_mult = Float
@@ -34,7 +34,7 @@ This pivot from one-row-per-slot to one-row-per-unit landed because (a) "list th
 | counter_buff_target = String
 | counter_buff_duration = Integer
 | counter_is_armed_ability = Boolean
-| alt_attack_type = String (allowed values=melee,ranged,reach)
+| alt_attack_type = String (allowed values=melee_attack,melee_attack_no_counter,ranged_attack,ranged_attack_no_range,ranged_attack_no_close,ranged_attack_no_range_close,remote_attack,remote_attack_penalty)
 | alt_pattern_sid = String
 | alt_passive = String
 | alt_stat_dmg_mult = Float
@@ -54,7 +54,7 @@ This pivot from one-row-per-slot to one-row-per-unit landed because (a) "list th
 | alt_multitarget_type = String
 | alt_num_targets = Integer
 | alt_is_armed_ability = Boolean
-| alt2_attack_type = String (allowed values=melee,ranged,reach)
+| alt2_attack_type = String (allowed values=melee_attack,melee_attack_no_counter,ranged_attack,ranged_attack_no_range,ranged_attack_no_close,ranged_attack_no_range_close,remote_attack,remote_attack_penalty)
 | alt2_pattern_sid = String
 | alt2_passive = String
 | alt2_stat_dmg_mult = Float
@@ -81,7 +81,7 @@ This pivot from one-row-per-slot to one-row-per-unit landed because (a) "list th
 | unit_id = String                                          <!-- primary key -->
 
 <!-- DEFAULT slot — what the unit does on a normal attack action. -->
-| default_attack_type = String (allowed values=melee,ranged,reach)
+| default_attack_type = String (allowed values=melee_attack,melee_attack_no_counter,ranged_attack,ranged_attack_no_range,ranged_attack_no_close,ranged_attack_no_range_close,remote_attack,remote_attack_penalty)
 | default_pattern_sid = String                              <!-- engine pattern; usually omitted (derivable from passive) -->
 | default_passive = String                                  <!-- FK -> AttackPassive (or NULL) -->
 | default_stat_dmg_mult = Float                             <!-- override; default 1.0 -->
@@ -97,7 +97,7 @@ This pivot from one-row-per-slot to one-row-per-unit landed because (a) "list th
 | default_dont_trigger_energy_regen = Boolean
 
 <!-- COUNTER slot — what the unit does when retaliating. -->
-| counter_attack_type = String (allowed values=melee,ranged,reach)
+| counter_attack_type = String (allowed values=melee_attack,melee_attack_no_counter,ranged_attack,ranged_attack_no_range,ranged_attack_no_close,ranged_attack_no_range_close,remote_attack,remote_attack_penalty)
 | counter_pattern_sid = String
 | counter_passive = String
 | counter_stat_dmg_mult = Float
@@ -111,7 +111,7 @@ This pivot from one-row-per-slot to one-row-per-unit landed because (a) "list th
 | counter_is_armed_ability = Boolean
 
 <!-- ALT slot — situational fallback / Fighting Style / once-per-battle. -->
-| alt_attack_type = String (allowed values=melee,ranged,reach)
+| alt_attack_type = String (allowed values=melee_attack,melee_attack_no_counter,ranged_attack,ranged_attack_no_range,ranged_attack_no_close,ranged_attack_no_range_close,remote_attack,remote_attack_penalty)
 | alt_pattern_sid = String
 | alt_passive = String
 | alt_stat_dmg_mult = Float                                 <!-- default 0.5 -->
@@ -133,7 +133,7 @@ This pivot from one-row-per-slot to one-row-per-unit landed because (a) "list th
 | alt_is_armed_ability = Boolean
 
 <!-- ALT2 slot — same shape as alt. Only Medusa and a handful use this. -->
-| alt2_attack_type = String (allowed values=melee,ranged,reach)
+| alt2_attack_type = String (allowed values=melee_attack,melee_attack_no_counter,ranged_attack,ranged_attack_no_range,ranged_attack_no_close,ranged_attack_no_range_close,remote_attack,remote_attack_penalty)
 | alt2_pattern_sid = String
 | alt2_passive = String
 | alt2_stat_dmg_mult = Float

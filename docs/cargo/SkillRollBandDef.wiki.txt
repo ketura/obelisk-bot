@@ -1,0 +1,56 @@
+<noinclude>
+Small reference table — '''4 rows''', class-invariant — listing which levels each <code>band_kind</code> applies to. Every <code>SkillRollWeightDef</code> row's <code>band_kind</code> joins to a row here.
+
+The level grid is identical across all 12 standard tables (and the 12 arena tables). Rather than embed the grid 24× into per-table data, the bot extracts it once and stores it here. If a future patch differentiates the grid per-class, this table promotes to <code>(table_id, band_kind, levels)</code> at the cost of 24× the rows.
+
+== Schema ==
+{{#cargo_declare:_table=SkillRollBand
+| id = String
+| levels = List (,) of Integer
+| description = Wikitext
+}}
+
+<pre><nowiki>
+{{SkillRollBandDef
+| id = String (allowed values=default,magic_levels,signature_levels,level_20_mega)
+| levels = List (,) of Integer    <!-- comma-separated, e.g. "4,8,12,16,24,28,32,36,40,44,48" -->
+| description = Wikitext          <!-- human-readable trigger explanation -->
+}}
+</nowiki></pre>
+
+== Field notes ==
+* '''<code>id</code>''' is the <code>band_kind</code> value used in <code>SkillRollWeightDef</code> rows. Enum of 4 fixed values.
+* '''<code>levels</code>''' is a Cargo <code>List of Integer</code> column with comma delimiter. Use the <code>HOLDS</code> operator to test membership in a query: <code>WHERE levels HOLDS "20"</code> matches every band that fires at level 20.
+* '''<code>description</code>''' is editor-authored prose explaining when the band fires. Bot writes a default ("Applies on the magic-milestone levels: …"); a wiki editor may rewrite for readability.
+
+== Canonical row contents ==
+{| class="wikitable"
+! <code>id</code> !! <code>levels</code> !! description (en)
+|-
+| <code>default</code> || <code>1,2,3,…,50</code> (50 entries) || Applies to every level-up from 1 through 50. The baseline pool every roll draws from.
+|-
+| <code>magic_levels</code> || <code>4,8,12,16,24,28,32,36,40,44,48</code> || Every 4th level except 20 (which is covered by the level-20 milestone). Adds the four magic-element schools at their baseline weights — effectively doubling the chance of a magic-school offering on those levels.
+|-
+| <code>signature_levels</code> || <code>5,10,15,25,30</code> || Every 5th level from 5 through 30, except 20. Adds <code>+100</code> weight to the table's own faction skill and <code>+100</code> to the class-signature skill (battle_artistry for might, wisdom for magic).
+|-
+| <code>level_20_mega</code> || <code>20</code> || The level-20 milestone — fires alone. Adds doubled magic-element weights (160/40/120/80 for day/night/space/primal) plus <code>+100</code> faction and <code>+100</code> class-signature. The single most-distinctive level in the roll system.
+|}
+
+== Why additive, not replacing ==
+At level 20 in <code>humans_might_skills_table</code>, the engine produces an effective <code>magic_day</code> weight of '''240''' (= 80 default + 160 level_20_mega), not 160. This is empirically consistent with the "doubled magic at level 20" player-facing description and matches HoMM design tradition for milestone-level boosts.
+
+Verified by working backwards: if the overlay replaced the default, faction_humans at level 20 would drop from 200 to 100 (worse than baseline) — incoherent. If the overlay adds, faction_humans goes from 200 to 300 (better at milestone) — coherent.
+
+== Related tables ==
+* [[Template:SkillRollWeightDef|SkillRollWeight]] — joined on <code>band_kind = SkillRollBand.id</code> (1:N from band side).
+
+== Notes ==
+* The negative-level sentinels <code>[-1]</code> and <code>[-2]</code> in source are '''not''' represented here. <code>[-1]</code> is dropped at extract (byte-identical to the default 1..50 band in every file — suspected engine fallback for a never-occurring code path; the audit flags it if a future patch breaks the equality). <code>[-2]</code> is the pseudo-skill fallback for "main pool can't supply 3 valid offerings" and lives in [[Template:StatBonusRollDef|StatBonusRoll]].
+
+[[Category:Cargo Definitions]]
+</noinclude><includeonly>{{#cargo_store:_table=SkillRollBand
+| id = {{{id|}}}
+| levels = {{{levels|}}}
+| description = {{{description|}}}
+}}
+Created <code>SkillRollBand</code> entry: <code>{{{id|}}}</code></includeonly>

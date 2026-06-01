@@ -1956,6 +1956,147 @@ Verified: the 51-test suite is green, plus a direct-call keystone harness and a 
 
 **Pending:** commit; the fresh end-to-end re-upload against the real game corpus (DB wiped + regenerated, so no migration concerns).
 
+## D-041 — Hero skill-roll tables: 4 dedicated tables; additive overlay bands; per-hero arena replacement pages
+
+**Date:** 2026-05-18
+**Status:** Locked. Schema docs in `docs/cargo/` (SkillRollTableDef, SkillRollWeightDef, SkillRollBandDef, StatBonusRollDef, SkillRollReplacementDef); models in `models/skill_roll.py`; extract in `extract/skill_roll.py`; emit in `emit/skill_roll.py`. End-to-end verified against 2026-05-14: 24 tables, 668 weights, 4 bands, 12 stat-bonus rows, 84 replacements across 28 hero pages. Zero audit warnings.
+
+### Problem
+
+The hero level-up "skill offering" system was the first big category we'd skipped during the initial pass. Source data sits in `DB/heroes_skills/skills_by_level_tables/` (24 tables) + `skills_by_level_replace_tables/` (1 file, 28 hero overlays) + `skills/pseudo_skills.json` (12 stat-bonus pseudo skills). The question the wiki needs to answer is "given a hero class and level, what's the chance of being offered each skill?" — but the source data carries layers of shared-by-convention duplication that need archaeology to model cleanly.
+
+### Ground-truth tiering (the archaeology)
+
+Three tiers of "is this data, or is this copy-pasted convention?":
+
+1. **The `[-2]` band is universal**, byte-identical across all 24 source files. It points at the 12 pseudo-skill entries that act as the engine's *fallback pool* — drawn when the main pool can't supply 3 valid offerings (no learnable new skills *and* fewer than 3 unexpert skills the hero could rank up). Promoted into the dedicated `StatBonusRoll` table; one shared seed-style emit, not duplicated per class.
+
+2. **The `[-1]` band is byte-identical to the main `[1..50]` band** in every file. Suspected engine fallback for an unreachable code path (50-level grid is design-space padding; effective level cap is ~24). Dropped at extract with an audit-log entry that fires if a future patch breaks the equality.
+
+3. **The 12 standard tables are the real ground truth**, keyed on `(faction, class_type)`. Every faction hero in a `(faction, class_type)` cell points at the same table via `skillsRollVariant`; zero overrides across all 108 faction heroes. Mirrors the HeroClass discovery from D-027.
+
+### Resolution: 4 dedicated Cargo tables
+
+`SkillRollTable` (24 rows), `SkillRollWeight` (668 rows), `SkillRollBand` (4 rows, shared seed), `StatBonusRoll` (12 rows, shared seed), `SkillRollReplacement` (84 rows). Schema docs hold the field-level detail; this entry captures the why.
+
+**Why not fold into `Entry` (D-024 catch-all):** `SkillRollWeight` has a `weight` column on top of name+desc+i18n, so per the D-024 rule it earns its own table. Same for `SkillRollBand` (has a `levels` list column), `StatBonusRoll` (has `stat`, `magnitude`, `weight` columns), and `SkillRollReplacement` (has hero_id, level, weight). All four exceed the Entry shape.
+
+**Why not split standard from arena into separate tables:** both share the identical schema; the difference is the SID namespace (`skill_*` vs `arena_skill_*`) and the smaller pool. A `mode` column on `SkillRollTable` (`standard` / `arena`) lets queries filter naturally and surfaces both content sets in the same table for cross-mode comparisons. Per the D-024 spirit — consolidate on shape match, don't multiply tables.
+
+**Why `class_id` is materialized alongside `(faction, class_type)`** on `SkillRollTable`: redundant per Codd, but lets `HeroClass.id = SkillRollTable.class_id` work as a single-key left join from either direction. Costs three letters per row; saves the template author from re-deriving `<class_type>_<faction>` everywhere.
+
+### Bands are additive
+
+The `specialList` overlays in source (magic_levels, signature_levels, level_20_mega) add to the default-band weights at their matching levels, they don't replace. Verified empirically: at level 20 the `level_20_mega` entry for `magic_day` has weight 160; if it were a replacement, level 20's effective magic_day weight would be 160 (2x default), but if additive it's 80+160=240 (3x default). The "doubled magic at level 20" player-facing characterization only fits the additive reading.
+
+**Operational consequence:** the wiki-side "effective weight at level L" query is `SUM(weight)` joined to `SkillRollBand.levels HOLDS L`. Cargo's `List (,) of Integer` type makes `HOLDS` direct, no template gymnastics. The query is sketched in `SkillRollWeightDef.wiki.txt`.
+
+### Per-hero pages for SkillRollReplacement (not one big page)
+
+The replace_table source file is a single JSON listing all 28 heroes' arena-mode overlays. Initial schema doc said "one big page" since the source is one file; revised to per-hero pages (`Data:SkillRollReplacement/<hero_id>`) to match the per-row-as-page convention used by `AttackPassive` / `Difficulty` / similar. Trade-off: 28 small pages vs 1 medium page. Per-hero pages win on discoverability ("show me what overrides apply to human_hero_5" → one URL) and on edit-history granularity.
+
+The empirical contents (1 skill at levels 2/4/6, weight 500 or 1000) couldn't tell us whether the overlay *replaces* the arena base weights or *adds* to them. Without engine code, we don't know. The doc treats it as additive (consistent with HoMM tradition; if it were replacement, levels 2/4/6 in arena would offer only one specific skill, which is a strange UX). Flagged in the schema doc as a known unknown.
+
+### Arena has only one specialList overlay
+
+Standard tables have all three specialList entries; arena tables have only `magic_levels`. Why: arena games cap at level 6, so `signature_levels` (5,10,15,25,30) only fires on level 5 — partially useful — and `level_20_mega` is entirely unreachable. The arena designers either deliberately omitted them or didn't bother adding code paths that would never fire. Either way the extractor handles it cleanly; the per-band row counts vary correctly.
+
+### Necros and unfrozen arena tables omit their own faction skill
+
+15 rows in their default band vs 16 in the other four arena tables. The missing skill is `arena_skill_faction_undead` / `arena_skill_faction_unfrozen` — neither appears in *any* arena table. This is **design intent, not a bug**: Necromancy (post-battle unit raising) and Communion (pre-battle unit count inflation based on overworld victories) have no effect in a single arena battle. The other four factions' skills — Temple (death-trigger bonuses), Dungeon (stance switching), Hive (larva spawning), Grove (Focus Charge) — all fire mid-combat and are kept. No audit warning; this is the correct content.
+
+### Class-signature exclusivity is data-enforced
+
+`skill_battle_artistry` appears in only the 6 might tables; `skill_wisdom` appears in only the 6 magic tables. Mutually exclusive at the SID level — no engine-side filter needed. Surfaced in the schema doc so the wiki template authors don't write an unnecessary class-check filter.
+
+### Player-presentation caveats (the wiki copy must spell these out)
+
+The raw weight is not a per-level-up offering probability:
+- The game presents 3 offerings per level. **Slot 1 is reserved for a guaranteed upgrade of an existing non-Expert skill** (when any exist); only slots 2-3 are drawn from this urn. Per-skill "chance to appear" in slots 2-3 is approximately `1 - (1 - p)^2` for single-roll probability `p`.
+- The roll does not appear to filter the urn by hero state before drawing. A roll that lands on an already-Basic skill becomes the Advanced offering; that's *not* a separate code path, just a display affordance — so the same data row manifests differently per hero.
+- When the hero has fewer than 3 valid "unexpert and learnable" skills available, the `StatBonusRoll` pool fills the leftover offering slots. So the +1 / +2 / +3 stat odds (99% / 0.99% / 0.0025% within the fallback) become visible only in late-game runs once the skill book is full.
+
+This block is captured under "Caveats for player-facing presentation" in `SkillRollWeightDef.wiki.txt`. Wiki template authors should reproduce or link to it on every Class display article that surfaces a roll-weight table.
+
+### Out of scope (deferred)
+
+- **Campaign / custom-map / tutorial tables.** The `skills_by_level_tables/campaign/` (8 files) and `custom_maps/` (1 file) subdirectories ship bespoke per-hero variants and a tutorial-narrowed pool. Campaign is demonstrably unfinished; deferred until display articles exist for any of them. Per-user call.
+- **Precomputed per-level-totals helper table.** Discussed; rejected for v1. The template can do the math via `SUM(weight)` + `HOLDS`. If template logic gets gnarly we can revisit.
+
+### Code shape
+
+- `models/skill_roll.py` - `SkillRollTableRecord`, `SkillRollWeightRecord`, `SkillRollBandRecord`, `StatBonusRollRecord`, `SkillRollReplacementRecord`, `SkillRollExtractionResult` (+ `BAND_KINDS` tuple).
+- `extract/skill_roll.py` - `extract_skill_rolls(paths)` walks the 24 top-level table files, drops the `-1` sentinel band with audit-equality check, promotes `-2` into shared `StatBonusRoll` (first-occurrence wins; later occurrences audited for divergence), classifies `specialList` entries by their exact level-list signature, and expands the replace table per (hero, level). `arena_table_id` derived by reading `skillsRollVariant` off the hero JSON.
+- `emit/skill_roll.py` - `emit_skill_roll_table_page` (header + N weights), `emit_skill_roll_band_page`, `emit_stat_bonus_roll_page` (uses `render_translation_block` for the per-pseudo desc + shared name; pseudo entries share `skill_pseudo_name` so the name translation duplicates across all 12 pages - acceptable redundancy), `emit_skill_roll_replacement_page` (inline level-rows per hero).
+- `cli.py` - extract+emit pass inserted before the astrologist-events block; stats line added to the summary printout.
+- `diff/wiki_diff.py` - `DIR_TO_WIKI_TABLE` extended with the four new dir → table mappings.
+- `docs/index_blurbs.md` - 4 new namespace blurbs.
+
+### Verified counts (2026-05-14 patch)
+
+```
+24 skill-roll tables (12 standard, 12 arena; 668 weights, 4 bands,
+12 stat-bonus rows, 84 replacements across 28 hero pages)
+```
+
+Page breakdown: 24 + 4 + 12 + 28 = 68 new data pages, plus 4 auto-generated `_index` pages = 72 total. ~145 KB added to the extract's char count.
+
+### Audit warnings (for future patches)
+
+The extractor surfaces audit warnings (logged but non-fatal) for:
+- `-1` sentinel band content diverging from the matching `[1..50]` default
+- `-2` band's pseudo-skill content diverging between source files (currently universal — divergence would be news)
+- Pseudo-skill SIDs in the `-2` band that aren't defined in `pseudo_skills.json`
+- Pseudo-skill stat values outside `{offence, defence, spellPower, intelligence}` — guards against patch-time scope creep
+- `specialList` entries with level-list signatures that don't match the four known patterns — surfaces engine design changes
+- `replace_table` heroes whose id doesn't appear in `DB/heroes/` (arena_table_id stays empty for those rows)
+
+The 2026-05-14 corpus produces zero audit warnings; a future patch with hero/data churn would surface here.
+
+## D-042 — Attack archetype: 8 views-discriminated subtypes; supersedes the naming flip half of D-021
+
+**Date:** 2026-05-18
+**Status:** Locked. Implemented in `emit/unit.py` (ENTRY_SEEDS), `extract/unit.py` (`_ATTACK_TYPE_FROM_JSON`, `_ATTACK_ARCHETYPE_FROM_SID`, `_refine_archetype`, `build_unit_attack`), `docs/cargo/UnitAttackDef.wiki.txt`, `docs/cargo/shared/EntryDef.wiki.txt`. Verified against 2026-05-14: 8 archetype seed pages emit; all 16 previously-mis-categorized units resolve correctly.
+
+### Problem
+
+D-021 set up `AttackArchetype` as a 3-row Entry table (`melee` / `ranged` / `reach`) and mapped the JSON `attackType_` enum onto it (`melee → melee`, `shoot → ranged`, `range → reach`). Two faults surfaced later:
+
+1. **The 3 rows collapse real nuance.** The L10n corpus has *eight* `base_passive_*_attack*` families a unit can display. Ranged splits four ways — standard (distance dropoff + melee penalty), `no_range` (no dropoff), `no_close` (no melee penalty), `no_range_close` (neither). Melee splits two ways — standard and `no_counter`. Long Reach has a `_penalty` variant. The 3-row table flattened all of this: 16 units (10 ranged + 6 melee) were getting the standard archetype description when the game shows them something different.
+
+2. **The bespoke `reach` key joins nowhere.** D-021 renamed `range → reach` because "the wiki uses Long Reach" and because `range` vs `ranged` kept confusing the assistant. But `reach` matches neither the JSON value (`range`) nor the L10n SID family token (`remote`). It was invented terminology that no source string corroborates. (`ranged` at least matched the SID family token; `reach` matched nothing.)
+
+### Resolution
+
+`attack_archetype` becomes an **8-row** Entry type, keyed on the **game's own SID-family token** — the subtype is the source L10n SID minus the `base_passive_` prefix and `_name` suffix. Zero invented terminology:
+
+`melee_attack`, `melee_attack_no_counter`, `ranged_attack`, `ranged_attack_no_range`, `ranged_attack_no_close`, `ranged_attack_no_range_close`, `remote_attack`, `remote_attack_penalty`.
+
+Display names still resolve from the SID's L10n text ("Melee Attack" / "Ranged Attack" / "Long Reach") and live on the Entry row's `display_name` — the player-facing label is unchanged; only the *key* stopped being bespoke.
+
+### Discrimination comes from the views file, not unit logic JSON
+
+The fine-grained variant is **not in unit logic JSON anywhere** — verified by exhaustive grep. The unit logic carries only the coarse `attackType_` (`melee` / `shoot` / `range`). The `no_range` / `no_close` / `no_counter` distinction is encoded *solely* in the `base_passive_*_attack*` passive SID a unit lists in its views file. Per D-015 (views are authoritative for what a unit displays), the extractor:
+
+1. Maps JSON `attackType_` to the coarse base subtype (`melee → melee_attack`, `shoot → ranged_attack`, `range → remote_attack`).
+2. After the default attack slot is built, calls `_refine_archetype(coarse, shared_sids)`, which scans the unit's views passive SIDs (the `shared_abilities` list) for a `base_passive_*_attack*` SID and returns the fine-grained subtype.
+
+**Family guard:** `_refine_archetype` only refines within the same family — a `ranged_attack*` views SID can't override a `melee_attack` slot. This prevents a stray views passive from corrupting a slot whose damage profile came from a different attack type. In the 2026-05-14 corpus no mismatch occurs, but the guard is cheap insurance.
+
+### Scope limits
+
+- **Default slot only.** Views passives describe the unit's *primary* attack. `counter_` / `alt_` / `alt2_` slots keep the coarse base subtype from their JSON `attackType_` — counterattacks are nearly always plain melee and alt attacks rarely carry the penalty nuances. If a future need arises to fine-grain non-primary slots, it needs a separate discrimination source.
+- **`remote_attack_penalty` ships with zero current users.** No unit's views file equips it, but it's a real game passive (the SID resolves to real L10n text) so the Entry row exists for completeness — a future patch equipping it onto a unit needs no code change. (Contrast D-022's rejected `walk` movement row, which had *no* source SID at all.)
+- **"Double Shot" is deliberately NOT an archetype.** `base_passive_double_strike_ranged_attack` (Crossbowman upg) is a mechanic layered *on top of* a base attack, not a replacement archetype. It belongs in a standalone passive table, deferred. The melee/reach double-strike SIDs exist in the corpus but no unit equips them.
+
+### Supersedes
+
+The naming-flip half of D-021 (`shoot → ranged`, `range → reach`). The rest of D-021 (the `UnitAttack` one-fat-row schema, the `AttackPassive` shared table, per-slot defaults) is unchanged. The `UnitAbilityActive.attack_type` column still carries raw JSON `attackType_` values (`cast` / `jump` / `move` / `end_move_attack` / etc.) — that inconsistency is noted as a known gap; see the abilities-audit follow-up.
+
+### Known follow-up
+
+`UnitAbilityActive.attack_type` uses raw JSON enum values while `UnitAttack` now uses SID-token archetypes — two naming schemes for one concept. 147 ability rows carry `cast` / `jump` / `move` / `end_move_attack` attack types that join to no Entry row. A dedicated audit of `UnitAbility` extraction end-to-end is warranted (flagged during the D-042 investigation; not yet scheduled).
+
 ## Open questions / known unknowns
 
 

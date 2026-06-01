@@ -267,19 +267,50 @@ def _unit_attack_params(record: UnitAttack) -> dict[str, Any]:
 # fallback. Optional `icon` field per entry. See D-024.
 ENTRY_SEEDS: dict[str, dict[str, dict[str, Any]]] = {
     "attack_archetype": {
-        "melee": {
+        # Subtype = the source L10n SID minus the ``base_passive_`` prefix
+        # and ``_name`` suffix — the game's own internal term. The coarse
+        # variants (melee_attack / ranged_attack / remote_attack) map from
+        # JSON ``attackType_``; the fine-grained ones (no_range / no_close /
+        # no_counter / etc.) are discriminated from the unit's views-file
+        # passive SID. See D-042.
+        "melee_attack": {
             "name_sid": "base_passive_melee_attack_name",
             "desc_sid": "base_passive_melee_attack_description",
             "display_name_fallback": "Melee Attack",
         },
-        "ranged": {
+        "melee_attack_no_counter": {
+            "name_sid": "base_passive_melee_attack_no_counter_name",
+            "desc_sid": "base_passive_melee_attack_no_counter_description",
+            "display_name_fallback": "Melee Attack",
+        },
+        "ranged_attack": {
             "name_sid": "base_passive_ranged_attack_name",
             "desc_sid": "base_passive_ranged_attack_description",
             "display_name_fallback": "Ranged Attack",
         },
-        "reach": {
+        "ranged_attack_no_range": {
+            "name_sid": "base_passive_ranged_attack_no_range_name",
+            "desc_sid": "base_passive_ranged_attack_no_range_description",
+            "display_name_fallback": "Ranged Attack",
+        },
+        "ranged_attack_no_close": {
+            "name_sid": "base_passive_ranged_attack_no_close_name",
+            "desc_sid": "base_passive_ranged_attack_no_close_description",
+            "display_name_fallback": "Ranged Attack",
+        },
+        "ranged_attack_no_range_close": {
+            "name_sid": "base_passive_ranged_attack_no_range_close_name",
+            "desc_sid": "base_passive_ranged_attack_no_range_close_description",
+            "display_name_fallback": "Ranged Attack",
+        },
+        "remote_attack": {
             "name_sid": "base_passive_remote_attack_name",
             "desc_sid": "base_passive_remote_attack_description",
+            "display_name_fallback": "Long Reach",
+        },
+        "remote_attack_penalty": {
+            "name_sid": "base_passive_remote_attack_penalty_name",
+            "desc_sid": "base_passive_remote_attack_penalty_description",
             "display_name_fallback": "Long Reach",
         },
     },
@@ -507,6 +538,37 @@ ENTRY_SEEDS: dict[str, dict[str, dict[str, Any]]] = {
             "display_name_fallback": "Attributes",
             "source_path": "Lang/english/texts/ui.json",
         },
+        "army": {
+            "name_sid": "army_laws",
+            "display_name_fallback": "Army",
+            "source_path": "Lang/english/texts/ui.json",
+        },
+        "description": {
+            "name_sid": "unit_window_narrative",
+            "display_name_fallback": "Description",
+            "source_path": "Lang/english/texts/ui.json",
+        },
+        # These two SIDs ship as tooltip labels with a trailing colon
+        # (varies by language — ASCII ``:``, fullwidth ``：``, with or
+        # without surrounding NBSP / space). ``strip_trailing_colon``
+        # strips that off in every language so the stored label is the
+        # bare word. Translation quirks worth knowing: Russian's
+        # ``arenaUnitCount`` translates as "Кол-во" (Count/Quantity)
+        # rather than the creature-noun other languages use; German's
+        # ``tooltipRang`` is "Klasse" (overlaps with a "Class" label
+        # if both are used in the same template).
+        "tier": {
+            "name_sid": "tooltipRang",
+            "display_name_fallback": "Tier",
+            "source_path": "Lang/english/texts/ui.json",
+            "strip_trailing_colon": True,
+        },
+        "creature": {
+            "name_sid": "arenaUnitCount",
+            "display_name_fallback": "Creature",
+            "source_path": "Lang/english/texts/menu.json",
+            "strip_trailing_colon": True,
+        },
     },
 }
 
@@ -543,6 +605,7 @@ def render_translation_block(
     bonus_desc_sid: str | None = None,
     en_name_fallback: str | None = None,
     en_description_fallback: str | None = None,
+    strip_trailing_colon: bool = False,
     resolver: PlaceholderResolver | None = None,
     unit_json: dict[str, Any] | None = None,
     ability_json: dict[str, Any] | None = None,
@@ -576,8 +639,14 @@ def render_translation_block(
     supply English ``name`` / ``description`` when the corresponding SID
     doesn't resolve in the corpus — used by Entry seeds (name) and by
     Difficulty, whose description is literal English source text with no
-    SID at all (D-039 / D-040). The ``*_json`` / ``skill_level`` kwargs
-    thread resolver context for placeholder substitution.
+    SID at all (D-039 / D-040). ``strip_trailing_colon`` is for the
+    occasional seed whose source SID is a tooltip-label that the game
+    ships with a trailing ``:`` (e.g. ``tooltipRang`` = "Tier:"); set
+    True to strip trailing colon-plus-whitespace from the resolved
+    name / description / bonus_description in every language (handles
+    both ASCII ``:`` and fullwidth ``：`` plus NBSP / regular space on
+    either side). The ``*_json`` / ``skill_level`` kwargs thread
+    resolver context for placeholder substitution.
     """
     if not name_sid and not desc_sid and not bonus_desc_sid:
         return ""
@@ -604,6 +673,15 @@ def render_translation_block(
             _lookup_text(bonus_desc_sid, lang_dir, corpus, resolver, **ctx)
             if bonus_desc_sid else None
         )
+        if strip_trailing_colon:
+            # Some tooltip-label SIDs ship as "Label:" / "ラベル：" /
+            # "Label\xa0:" (French NBSP) / "Label : " (German trailing
+            # spaces). Strip any combination of trailing whitespace and
+            # ASCII (U+003A) or fullwidth (U+FF1A) colon.
+            _TRIM = " \t\n\r\xa0:："
+            if name: name = name.rstrip(_TRIM)
+            if description: description = description.rstrip(_TRIM)
+            if bonus_description: bonus_description = bonus_description.rstrip(_TRIM)
         if code == "en":
             # The English name is filename-fodder for wiki icon/image
             # references — flatten smart apostrophes to ASCII. Per-
@@ -653,6 +731,7 @@ def render_entry_block(
     icon: str | None = None,
     narrative_desc_sid: str | None = None,
     source_path: str | None = None,
+    strip_trailing_colon: bool = False,
     resolver: PlaceholderResolver | None = None,
     # Resolver context for placeholder substitution. Mirrors _lookup_text's
     # kwargs; pass whichever the row's translated text needs.
@@ -715,6 +794,7 @@ def render_entry_block(
         subtype=subtype,
         variant=variant,
         en_name_fallback=display_name_fallback,
+        strip_trailing_colon=strip_trailing_colon,
         resolver=resolver,
         law_json=law_json,
         skill_json=skill_json,
@@ -734,6 +814,7 @@ def render_entry_block(
             corpus=corpus,
             subtype=subtype,
             variant=variant,
+            strip_trailing_colon=strip_trailing_colon,
             resolver=resolver,
             law_json=law_json,
             skill_json=skill_json,
@@ -759,6 +840,7 @@ def emit_entry_page(
     icon: str | None = None,
     narrative_desc_sid: str | None = None,
     source_path: str | None = None,
+    strip_trailing_colon: bool = False,
     resolver: PlaceholderResolver | None = None,
 ) -> str:
     """Render a complete ``Data:<EntryType>/<subtype>`` page — the
@@ -784,6 +866,7 @@ def emit_entry_page(
         icon=icon,
         narrative_desc_sid=narrative_desc_sid,
         source_path=source_path,
+        strip_trailing_colon=strip_trailing_colon,
         resolver=resolver,
     )
     return (
@@ -812,6 +895,7 @@ def emit_entry_page_from_seed(
         icon=seed.get("icon"),
         narrative_desc_sid=seed.get("narrative_desc_sid"),
         source_path=seed.get("source_path"),
+        strip_trailing_colon=seed.get("strip_trailing_colon", False),
     )
 
 

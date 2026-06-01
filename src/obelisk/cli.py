@@ -65,6 +65,7 @@ from obelisk.extract import (
     extract_laws,
     extract_map_objects,
     extract_resources,
+    extract_skill_rolls,
     extract_skills,
     extract_spells,
     extract_units_enriched,
@@ -455,6 +456,74 @@ def cmd_extract(
         n_skill_pages += 1
         total_chars += len(orphan_page)
 
+    # Skill-roll tables (Data:SkillRollTable/<id> + companions). 24 roll
+    # tables (12 standard + 12 arena), each with ~36 weight rows; plus
+    # the 4-row band reference table, 12 stat-bonus pseudo-skills, and
+    # the 28-hero arena replacement overlays. See D-041.
+    skill_roll_result = extract_skill_rolls(paths)
+    n_roll_tables = len(skill_roll_result.tables)
+    n_roll_tables_standard = sum(
+        1 for t in skill_roll_result.tables if t.mode == "standard"
+    )
+    n_roll_tables_arena = sum(
+        1 for t in skill_roll_result.tables if t.mode == "arena"
+    )
+    n_roll_weights = len(skill_roll_result.weights)
+    n_roll_bands = len(skill_roll_result.bands)
+    n_stat_bonus = len(skill_roll_result.stat_bonus_rolls)
+    n_roll_replacements = len(skill_roll_result.replacements)
+    n_roll_audit = len(skill_roll_result.audit_warnings)
+
+    from obelisk.emit import (
+        emit_skill_roll_band_page,
+        emit_skill_roll_replacement_page,
+        emit_skill_roll_table_page,
+        emit_stat_bonus_roll_page,
+        group_replacements_by_hero,
+        group_weights_by_table,
+    )
+    skill_roll_table_dir = data_dir / "skill_roll_tables"
+    skill_roll_band_dir = data_dir / "skill_roll_bands"
+    stat_bonus_roll_dir = data_dir / "stat_bonus_rolls"
+    skill_roll_replacement_dir = data_dir / "skill_roll_replacements"
+    for d in (skill_roll_table_dir, skill_roll_band_dir,
+              stat_bonus_roll_dir, skill_roll_replacement_dir):
+        d.mkdir(parents=True, exist_ok=True)
+
+    weights_by_table = group_weights_by_table(skill_roll_result.weights)
+    for table in skill_roll_result.tables:
+        page = emit_skill_roll_table_page(
+            table, weights_by_table.get(table.id, ()),
+        )
+        (skill_roll_table_dir / f"{table.id}.wiki.txt").write_text(
+            with_import_category(page), encoding="utf-8",
+        )
+        total_chars += len(page)
+
+    for band in skill_roll_result.bands:
+        page = emit_skill_roll_band_page(band)
+        (skill_roll_band_dir / f"{band.id}.wiki.txt").write_text(
+            with_import_category(page), encoding="utf-8",
+        )
+        total_chars += len(page)
+
+    for sbr in skill_roll_result.stat_bonus_rolls:
+        page = emit_stat_bonus_roll_page(sbr, corpus, resolver=resolver)
+        (stat_bonus_roll_dir / f"{sbr.id}.wiki.txt").write_text(
+            with_import_category(page), encoding="utf-8",
+        )
+        total_chars += len(page)
+
+    replacements_by_hero = group_replacements_by_hero(skill_roll_result.replacements)
+    for hero_id, rows in replacements_by_hero.items():
+        page = emit_skill_roll_replacement_page(hero_id, rows)
+        (skill_roll_replacement_dir / f"{hero_id}.wiki.txt").write_text(
+            with_import_category(page), encoding="utf-8",
+        )
+        total_chars += len(page)
+
+    n_roll_replacement_pages = len(replacements_by_hero)
+
     # Astrologist weeks + months (Data:AstrologistEvent/<id>). 26 rows
     # total (15 weeks + 11 months) — the periodically-rolled global
     # modifiers ("Week of Sorcery", "Month of the Locust"). Identity
@@ -662,6 +731,12 @@ def cmd_extract(
         f"  {n_skills} skills ({n_skill_levels} levels, {n_skill_level_bonuses} bonus rows; "
         f"{n_sub_skills} sub-skills [{n_orphan_sub_skills} orphan], {n_sub_skill_bonuses} sub-skill bonus rows; "
         f"{n_skill_pages} pages)\n"
+        f"  {n_roll_tables} skill-roll tables "
+        f"({n_roll_tables_standard} standard, {n_roll_tables_arena} arena; "
+        f"{n_roll_weights} weights, {n_roll_bands} bands, "
+        f"{n_stat_bonus} stat-bonus rows, "
+        f"{n_roll_replacements} replacements across {n_roll_replacement_pages} hero pages"
+        f"{f'; {n_roll_audit} audit warnings' if n_roll_audit else ''})\n"
         f"  {n_astrologist_events} astrologist events "
         f"({n_astro_by_category.get('week', 0)} weeks, {n_astro_by_category.get('month', 0)} months)\n"
         f"  {n_difficulties} difficulties\n"
@@ -689,16 +764,20 @@ def cmd_diff_patch(
     Both labels must already exist under ``<out_root>/``. Run
     ``obelisk extract <patch>`` first to produce each side.
 
-    Writes to ``<out_root>/<new_label>/diff_vs_<old_label>/``::
+    The upload manifest is written to ``<out_root>/<new_label>/manifest.json``
+    — the same path ``obelisk generate`` uses — so a fresh diff replaces any
+    manifest already there and the follow-up command is the one-arg
+    ``obelisk upload <new_label>``.
+
+    Other artifacts land in ``<out_root>/<new_label>/diff_vs_<old_label>/``::
 
         changed_pages/<id>.diff   per-page unified diff (drilldown, local-only)
         wiki_summary.md           operator markdown summary
         patch_article.wiki.txt    body for Data:Patches/<new_label>
-        manifest.json             upload manifest (consumed by ``obelisk upload``)
         complete.diff             deep core-JSON diff, excluding Lang/
         localization.diff         deep core-JSON diff for Lang/ only
 
-    Run ``obelisk upload <old> <new>`` afterward to push.
+    Run ``obelisk upload <new_label>`` afterward to push.
     """
     from obelisk.diff import (
         diff_emit_dirs,
@@ -800,7 +879,9 @@ def cmd_diff_patch(
         "new_label": new_label,  # legacy alias, kept for any tooling still reading it
         "patch_article": {
             "title": f"Data:Patches/{new_label}",
-            "path": "patch_article.wiki.txt",
+            # Path is relative to the manifest's dir (out/<new_label>/);
+            # the patch article body still lives in the diff subfolder.
+            "path": f"diff_vs_{old_label}/patch_article.wiki.txt",
         },
         "pages": [
             {
@@ -811,14 +892,18 @@ def cmd_diff_patch(
             for p in wd.changed_pages
         ],
     }
-    (diff_dir / "manifest.json").write_text(
+    # Manifest goes to the extract root (out/<new_label>/manifest.json),
+    # the same path obelisk generate writes — so `obelisk upload <new_label>`
+    # is the single follow-up command for both full pushes and patch diffs.
+    # A fresh diff replaces whatever manifest is already there.
+    (new_dir / "manifest.json").write_text(
         json.dumps(manifest, indent=2), encoding="utf-8"
     )
 
     console.print(f"[green]Diff artifacts:[/green] {diff_dir}")
     console.print(
         f"[bold]Next:[/bold] review the artifacts, then run "
-        f"[cyan]obelisk upload {old_label} {new_label}[/cyan]"
+        f"[cyan]obelisk upload {new_label}[/cyan]"
     )
 
 
@@ -997,6 +1082,43 @@ def _save_manifest(manifest_path: Path, manifest: dict) -> None:
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
 
+def _load_manifest_or_die(manifest_path: Path) -> dict:
+    """Parse manifest.json with a friendly error on syntax mistakes.
+
+    The bot writes manifests itself, but operators routinely hand-edit
+    them between ``generate``/``diff`` and ``upload`` (curating which
+    pages get pushed, adjusting status, etc.). JSON's stock error
+    "Expecting ',' delimiter: line 302 column 5 (char 10397)" doesn't
+    show context, so this wraps it to surface a few lines around the
+    mistake.
+    """
+    text = manifest_path.read_text(encoding="utf-8")
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as e:
+        lines = text.splitlines()
+        start = max(1, e.lineno - 3)
+        end = min(len(lines), e.lineno + 3)
+        console.print(
+            f"[red]Manifest is not valid JSON:[/red] {manifest_path}\n"
+            f"  {e.msg} at line {e.lineno}, column {e.colno}"
+        )
+        console.print()
+        for i in range(start, end + 1):
+            marker = "[red]>[/red]" if i == e.lineno else " "
+            console.print(f"  {marker} {i:>5}: {lines[i-1]}")
+            if i == e.lineno:
+                pad = " " * (4 + 5 + 2 + max(0, e.colno - 1))
+                console.print(f"    {pad}[red]^[/red]")
+        console.print()
+        console.print(
+            "[yellow]Hint:[/yellow] usually a missing or extra comma between "
+            "list/dict entries. Run a JSON linter or "
+            f"`python -m json.tool {manifest_path}` to bisect."
+        )
+        raise typer.Exit(1)
+
+
 def _run_upload(
     manifest_path: Path,
     body_root: Path,
@@ -1009,8 +1131,9 @@ def _run_upload(
 
     ``body_root`` is the extract dir — relpaths in the manifest's
     ``pages`` are resolved against it. The patch article's path (if
-    present) is resolved against the manifest's *containing* dir, which
-    is where ``obelisk diff`` writes ``patch_article.wiki.txt``.
+    present) is resolved against the manifest's *containing* dir; the
+    manifest's ``patch_article.path`` carries any needed subfolder
+    prefix (e.g. ``diff_vs_<old>/patch_article.wiki.txt``).
 
     Resume-on-rerun: each page's ``status`` field in the manifest is
     updated after the upload attempt — ``success`` for written or
@@ -1032,7 +1155,7 @@ def _run_upload(
         console.print(f"[red]No manifest at {manifest_path}[/red]")
         raise typer.Exit(1)
 
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest = _load_manifest_or_die(manifest_path)
     manifest_dir = manifest_path.parent
     pages = manifest.get("pages") or []
     patch_article = manifest.get("patch_article")
@@ -1223,12 +1346,8 @@ def _run_upload(
 
 @app.command("upload")
 def cmd_upload(
-    label_a: str = typer.Argument(..., help=(
-        "Label to upload. With one arg: full-push from out/<label>/manifest.json. "
-        "With two args: diff-push (label_a=old, label_b=new)."
-    )),
-    label_b: str | None = typer.Argument(
-        None, help="If provided, upload the diff from label_a (old) -> label_b (new)."
+    label: str = typer.Argument(
+        ..., help="Label to upload — pushes out/<label>/manifest.json.",
     ),
     message: str = typer.Option(
         ..., "--message", "-m",
@@ -1250,17 +1369,12 @@ def cmd_upload(
 ) -> None:
     """Push pages to the wiki.
 
-    Two modes:
-
-    * **Full push** (one arg): ``obelisk upload <label> -m "..."`` reads
-      ``out/<label>/manifest.json`` (produced by ``obelisk generate``)
-      and pushes every listed page. Used for initial wiki population
-      or any full re-sync.
-
-    * **Diff push** (two args): ``obelisk upload <old> <new> -m "..."``
-      reads ``out/<new>/diff_vs_<old>/manifest.json`` (produced by
-      ``obelisk diff``) and pushes the changed pages plus the patch
-      article. Used in the routine patch cycle.
+    ``obelisk upload <label> -m "..."`` reads ``out/<label>/manifest.json``
+    and pushes every listed page. That manifest is written by either
+    ``obelisk generate <label>`` (full push — every page) or
+    ``obelisk diff <old> <label>`` (patch push — changed pages plus the
+    patch article); both write to the same path, so the upload command
+    is identical regardless of how the manifest was produced.
 
     The ``-m`` / ``--message`` flag is required on every invocation —
     deliberately so, to force a fresh edit summary per run instead of
@@ -1286,32 +1400,17 @@ def cmd_upload(
         raise typer.Exit(1)
     summary = f"obelisk-bot: {stripped}"
 
-    if label_b is None:
-        # Full-push mode.
-        extract_dir = out_root / label_a
-        manifest_path = extract_dir / "manifest.json"
-        if not manifest_path.is_file():
-            console.print(
-                f"[red]No manifest at {manifest_path}[/red] - "
-                f"run 'obelisk generate {label_a}' first"
-            )
-            raise typer.Exit(1)
-        body_root = extract_dir
-    else:
-        # Diff-push mode. label_a is old, label_b is new.
-        old_label, new_label = label_a, label_b
-        new_dir = out_root / new_label
-        diff_dir = new_dir / f"diff_vs_{old_label}"
-        manifest_path = diff_dir / "manifest.json"
-        if not manifest_path.is_file():
-            console.print(
-                f"[red]No manifest at {manifest_path}[/red] - "
-                f"run 'obelisk diff {old_label} {new_label}' first"
-            )
-            raise typer.Exit(1)
-        body_root = new_dir
+    extract_dir = out_root / label
+    manifest_path = extract_dir / "manifest.json"
+    if not manifest_path.is_file():
+        console.print(
+            f"[red]No manifest at {manifest_path}[/red] - "
+            f"run 'obelisk generate {label}' (full push) or "
+            f"'obelisk diff <old> {label}' (patch push) first"
+        )
+        raise typer.Exit(1)
 
-    _run_upload(manifest_path, body_root, config_path, dry_run=dry_run, summary=summary)
+    _run_upload(manifest_path, extract_dir, config_path, dry_run=dry_run, summary=summary)
 
 
 # ----------------------------------------------------------------------------

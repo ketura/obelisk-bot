@@ -51,6 +51,14 @@ from obelisk.emit.item_set import emit_item_set_page
 from obelisk.emit.law import emit_law_page
 from obelisk.emit.map_object import emit_map_object_page
 from obelisk.emit.skill import emit_orphan_sub_skills_page, emit_skill_page
+from obelisk.emit.skill_roll import (
+    emit_skill_roll_band_page,
+    emit_skill_roll_replacement_page,
+    emit_skill_roll_table_page,
+    emit_stat_bonus_roll_page,
+    group_replacements_by_hero,
+    group_weights_by_table,
+)
 from obelisk.emit.spell import emit_spell_page
 from obelisk.emit.unit import (
     ENTRY_SEEDS,
@@ -86,7 +94,13 @@ __all__ = [
     "emit_map_object_page",
     "emit_orphan_sub_skills_page",
     "emit_skill_page",
+    "emit_skill_roll_band_page",
+    "emit_skill_roll_replacement_page",
+    "emit_skill_roll_table_page",
     "emit_spell_page",
+    "emit_stat_bonus_roll_page",
+    "group_replacements_by_hero",
+    "group_weights_by_table",
     "emit_unit_page",
     "iter_entry_seeds",
     "load_index_blurbs",

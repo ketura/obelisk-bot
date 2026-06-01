@@ -1,0 +1,90 @@
+<noinclude>
+One row per (table, band_kind, skill). The substance of the skill-roll system — every individual weight a hero might encounter when their class's roll table fires.
+
+Per-table row counts are uniform across the 12 standard tables (the level-grid structure is class-invariant; only the weights and the signature-skill SID swap):
+* '''24 rows''' in the <code>default</code> band (the full skill pool).
+* '''4 rows''' in the <code>magic_levels</code> band (the four magic-element schools).
+* '''6 rows''' in the <code>level_20_mega</code> band (those four schools plus faction + class-signature).
+* '''2 rows''' in the <code>signature_levels</code> band (faction + class-signature).
+
+Total: '''36 rows per standard table''' × 12 = ~432 rows for standard. Arena tables share the same shape with slightly smaller pools.
+
+'''Bands are additive.''' The effective weight for skill <code>S</code> at level <code>L</code> is the SUM of weights across every band whose <code>SkillRollBand.levels</code> list contains <code>L</code>. The query pattern is documented under "Display-layer query patterns" below.
+
+== Schema ==
+{{#cargo_declare:_table=SkillRollWeight
+| table_id = String
+| band_kind = String (allowed values=default,magic_levels,signature_levels,level_20_mega)
+| skill_id = String
+| weight = Integer
+}}
+
+<pre><nowiki>
+{{SkillRollWeightDef
+| table_id = String           <!-- matches SkillRollTable.id -->
+| band_kind = String (allowed values=default,magic_levels,signature_levels,level_20_mega)
+| skill_id = String           <!-- matches Skill.id, or a pseudo / faction skill SID -->
+| weight = Integer            <!-- raw weight (not a percentage). Lower bound 1 (omitted = not in this band). -->
+}}
+</nowiki></pre>
+
+== Field notes ==
+* '''<code>weight</code>''' is the raw <code>chance</code> integer from source JSON. It is '''not''' a percentage — to get a per-roll probability, divide by the sum of all active weights at the queried level. Empirical range: 20 (magic_night, weakest) to 200 (own faction skill, strongest) in standard tables; up to 1000 in arena per-hero overrides.
+* '''<code>band_kind</code>''' enumerates the four roll bands. All four exist in every standard table; arena tables share the same band kinds. The grid of which levels each band covers is class-invariant and lives in <code>SkillRollBandDef</code>.
+* '''<code>skill_id</code>''' is the skill SID (joins to [[Template:SkillDef|<code>SkillDef.id</code>]]). The <code>default</code> band always includes the table's own-faction skill (e.g. <code>skill_faction_humans</code> in humans tables) and its class-signature skill (<code>skill_battle_artistry</code> for might, <code>skill_wisdom</code> for magic). The other three bands hold only the magic-element / faction / signature subset relevant to the milestone.
+
+== Class-signature exclusivity ==
+<code>skill_battle_artistry</code> appears in '''only''' the 6 might tables; <code>skill_wisdom</code> appears in '''only''' the 6 magic tables. This exclusivity is encoded in the data — there is no engine-side filter to enforce it. A magic class cannot roll battle_artistry; a might class cannot roll wisdom.
+
+The same skills also appear in the per-table <code>level_20_mega</code> and <code>signature_levels</code> overlays (with overlay weights, additive on top of the default).
+
+== Display-layer query patterns ==
+'''Base weights for a class (no level filter):'''
+<pre>
+{{#cargo_query:
+  tables=SkillRollWeight
+  | fields=skill_id, weight
+  | where=table_id="humans_might_skills_table" AND band_kind="default"
+  | order by=weight DESC, skill_id
+  | format=table
+}}
+</pre>
+
+'''Effective weights at a specific level''' (sums all bands containing that level):
+<pre>
+{{#cargo_query:
+  tables=SkillRollWeight=W, SkillRollBand=B
+  | join on=W.band_kind=B.id
+  | fields=W.skill_id=Skill, SUM(W.weight)=EffectiveWeight
+  | where=W.table_id="humans_might_skills_table"
+          AND B.levels HOLDS "20"
+  | group by=W.skill_id
+  | order by=EffectiveWeight DESC
+  | format=table
+}}
+</pre>
+
+For non-milestone levels (1, 2, 3, 6, 7, 9, …), only the <code>default</code> band matches, so this query returns the same result as the base-weights query. For levels matching one or more overlay bands (4, 5, 8, 10, 20, …), the overlay weights add to the default.
+
+To get a true per-roll probability: divide <code>EffectiveWeight</code> by the SUM of <code>EffectiveWeight</code> across all skills returned by the same query.
+
+== Caveats for player-facing presentation ==
+The raw weight does '''not''' translate to "% chance to see this skill on level-up" without several caveats:
+* The game presents 3 offerings per level. Slot 1 is reserved as a guaranteed upgrade of an existing non-Expert skill (if any exist); only slots 2-3 are drawn from this weighted urn. Per-skill "chance to appear in slots 2-3" is approximately <code>1 − (1 − p)²</code> where <code>p</code> is the single-roll probability.
+* The engine does not appear to filter the urn by hero state before drawing — if the roll lands on a skill the hero already has at Basic, the game displays it as the Advanced upgrade option. So the same data row can manifest as a Basic offering for one hero and an Advanced offering for another.
+* When the hero has fewer than 3 valid "unexpert and learnable" slots available, leftover offering slots are filled from the [[Template:StatBonusRollDef|StatBonusRoll]] table instead — these are not drawn from <code>SkillRollWeight</code>.
+
+== Related tables ==
+* [[Template:SkillRollTableDef|SkillRollTable]] — the header row (1:N).
+* [[Template:SkillRollBandDef|SkillRollBand]] — the levels each <code>band_kind</code> covers (1:N from band side).
+* [[Template:SkillDef|Skill]] — joined on <code>skill_id = Skill.id</code> for full skill metadata (name, description, mastery levels).
+* [[Template:StatBonusRollDef|StatBonusRoll]] — the fallback pool when the main pool can't fill all 3 offering slots.
+
+[[Category:Cargo Definitions]]
+</noinclude><includeonly>{{#cargo_store:_table=SkillRollWeight
+| table_id = {{{table_id|}}}
+| band_kind = {{{band_kind|}}}
+| skill_id = {{{skill_id|}}}
+| weight = {{{weight|}}}
+}}
+Created <code>SkillRollWeight</code> entry: <code>{{{table_id|}}}/{{{band_kind|}}}/{{{skill_id|}}}</code></includeonly>

@@ -1,0 +1,87 @@
+<noinclude>
+The endgame stat-bonus fallback pool — '''12 rows''', class- and faction-invariant. When the hero's main skill-roll pool can't supply 3 valid offerings on a level-up (because they have no learnable new skills available '''and''' fewer than 3 non-Expert skills they could rank up), the engine fills the empty offering slots from this table instead.
+
+Each row is a "pseudo skill" granting a flat permanent bonus to one primary stat. There are 4 stats × 3 magnitude tiers = 12 entries. Empirically extracted from <code>Core/DB/heroes_skills/skills/pseudo_skills.json</code> and the <code>[-2]</code> band of any <code>skills_by_level_tables</code> file (the band content is byte-identical across all 24 standard + arena files, confirming the universal-pool reading).
+
+== Schema ==
+{{#cargo_declare:_table=StatBonusRoll
+| id = String
+| stat = String (allowed values=offence,defence,spellPower,intelligence)
+| magnitude = Integer
+| weight = Integer
+| name_sid = String
+| desc_sid = String
+}}
+
+<pre><nowiki>
+{{StatBonusRollDef
+| id = String                      <!-- skill_pseudo_1 through skill_pseudo_12 -->
+| stat = String (allowed values=offence,defence,spellPower,intelligence)
+| magnitude = Integer              <!-- the +N value added to the stat -->
+| weight = Integer                 <!-- raw weight in the fallback urn -->
+<!-- Localization references — display text lives in the Translation table, type='stat_bonus_roll' -->
+| name_sid = String                <!-- always 'skill_pseudo_name' (shared across all 12) -->
+| desc_sid = String                <!-- per-row, e.g. 'skill_pseudo_1_desc' -->
+}}
+</nowiki></pre>
+
+== Canonical row contents ==
+{| class="wikitable"
+! <code>id</code> !! <code>stat</code> !! <code>magnitude</code> !! <code>weight</code> !! within-tier share (4-way uniform) !! tier share of all fallback rolls
+|-
+| <code>skill_pseudo_1</code> || offence || 1 || 50000 || 25% || rowspan="4" style="text-align:right" | '''Tier 1 (+1):''' 99.0%
+|-
+| <code>skill_pseudo_2</code> || defence || 1 || 50000 || 25%
+|-
+| <code>skill_pseudo_3</code> || spellPower || 1 || 50000 || 25%
+|-
+| <code>skill_pseudo_4</code> || intelligence || 1 || 50000 || 25%
+|-
+| <code>skill_pseudo_5</code> || offence || 2 || 500 || 25% || rowspan="4" style="text-align:right" | '''Tier 2 (+2):''' 0.99%
+|-
+| <code>skill_pseudo_6</code> || defence || 2 || 500 || 25%
+|-
+| <code>skill_pseudo_7</code> || spellPower || 2 || 500 || 25%
+|-
+| <code>skill_pseudo_8</code> || intelligence || 2 || 500 || 25%
+|-
+| <code>skill_pseudo_9</code> || offence || 3 || 5 || 25% || rowspan="4" style="text-align:right" | '''Tier 3 (+3):''' 0.0025% (≈1 in 40,000)
+|-
+| <code>skill_pseudo_10</code> || defence || 3 || 5 || 25%
+|-
+| <code>skill_pseudo_11</code> || spellPower || 3 || 5 || 25%
+|-
+| <code>skill_pseudo_12</code> || intelligence || 3 || 5 || 25%
+|}
+
+Total fallback-pool weight: '''202,020''' = 4×50,000 + 4×500 + 4×5.
+
+== When does this fire ==
+Player-observed behavior: the fallback only appears in late-game runs. Specifically, an offering slot gets filled from this table when the engine's main roll cannot produce a valid offering — i.e. when every weighted draw from <code>SkillRollWeight</code> resolves to either "skill the hero doesn't have a slot for" (8 slots full and the rolled skill isn't already learned) '''or''' "skill the hero already has at Expert" (so it can't be ranked up further).
+
+Concretely:
+* '''Early game''' (1-2 skills, plenty of empty slots): zero fallback rolls per level. All 3 offerings come from the main pool.
+* '''Mid game''' (slots full, some upgrade paths remaining): zero fallback rolls — the upgrade slot mechanic absorbs the "I already have this" rolls.
+* '''Endgame''' (most skills at Expert): increasing number of fallback rolls until eventually all 3 offering slots come from here.
+
+'''The +3 bonus tier is statistically near-mythical''' under current mechanics. With a per-fallback-roll probability of 1 in ~40,000 and the fallback firing only in endgame, a typical player will never see a +3 stat option. Could be design-space padding for a future high-level mode, intentional easter-egg, or vestigial test scaffolding — JSON alone can't disambiguate.
+
+== Localization ==
+The 12 rows '''share a single <code>name_sid</code>''' (<code>skill_pseudo_name</code>) — the player-facing name is the same generic label for all twelve. <code>desc_sid</code> differs per row (<code>skill_pseudo_1_desc</code> through <code>skill_pseudo_12_desc</code>), with each describing the specific stat and magnitude granted.
+
+Translation rows live in the [[Template:TranslationDef|Translation]] table under <code>type='stat_bonus_roll'</code>, one row per (language, target_id) for the desc; the shared name gets one Translation row keyed on <code>skill_pseudo_name</code> with a free-floating target.
+
+== Related tables ==
+* [[Template:SkillRollWeightDef|SkillRollWeight]] — the main pool; this table is the engine's fallback when the main pool runs out of valid offerings.
+* [[Template:TranslationDef|Translation]] — display text in every language, joined on <code>id = Translation.target_id WHERE Translation.type='stat_bonus_roll'</code>.
+
+[[Category:Cargo Definitions]]
+</noinclude><includeonly>{{#cargo_store:_table=StatBonusRoll
+| id = {{{id|}}}
+| stat = {{{stat|}}}
+| magnitude = {{{magnitude|}}}
+| weight = {{{weight|}}}
+| name_sid = {{{name_sid|}}}
+| desc_sid = {{{desc_sid|}}}
+}}
+Created <code>StatBonusRoll</code> entry: <code>{{{id|}}}</code></includeonly>

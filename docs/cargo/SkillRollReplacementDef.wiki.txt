@@ -1,0 +1,95 @@
+<noinclude>
+Per-hero overlay rows that bias certain heroes' skill rolls in arena game mode — '''28 heroes''' total, '''~84 rows''' (each hero typically has one skill at levels 2, 4, and 6). Extracted from a single source file: <code>Core/DB/heroes_skills/skills_by_level_replace_tables/skills_by_level_replace_table.json</code>.
+
+Each hero gets its own data page (<code>Data:SkillRollReplacement/<hero_id></code>); the hero's 3-or-so level-keyed rows are inlined on that page. This matches the per-row-as-page convention used by <code>AttackPassive</code> and the other small reference tables — one wiki page per "thing the player would search for."
+
+Despite the source filename ("replace"), the data is best read as an '''additive overlay''' on top of the hero's arena <code>SkillRollTable</code> (not a wholesale replacement of the main pool for those levels). The structural argument: each entry typically lists one skill at very high weight (500 or 1000). If "replace" meant the entire roll table was swapped for these few entries, levels 2/4/6 would offer only that single skill — a deeply rigid pattern at odds with HoMM design conventions. The additive reading produces a strong-but-not-deterministic bias, which matches how flavor "signature skill nudges" work in other HoMM games. '''Additive vs. replacement cannot be 100% verified without engine code''' — wiki copy should hedge the wording.
+
+Faction distribution across the 28 heroes: '''6 demon, 5 dungeon, 3 human, 5 nature, 3 necro, 6 unfrozen'''. All overlays use the <code>arena_skill_*</code> SID namespace; this table never applies in standard (non-arena) play.
+
+== Schema ==
+{{#cargo_declare:_table=SkillRollReplacement
+| hero_id = String
+| arena_table_id = String
+| level = Integer
+| skill_id = String
+| weight = Integer
+}}
+
+<pre><nowiki>
+{{SkillRollReplacementDef
+| hero_id = String            <!-- matches HeroDef.id -->
+| arena_table_id = String     <!-- matches SkillRollTable.id where mode='arena' -->
+| level = Integer             <!-- the level this overlay fires on -->
+| skill_id = String           <!-- the skill SID (arena_skill_*) being biased -->
+| weight = Integer            <!-- weight added on top of the arena table's base weights -->
+}}
+</nowiki></pre>
+
+== Field notes ==
+* '''<code>hero_id</code>''' joins to <code>HeroDef.id</code>. Not all heroes have replacement rows — only the 28 listed here.
+* '''<code>arena_table_id</code>''' is the arena <code>SkillRollTable</code> the hero's overlay applies on top of. Derivable from the hero's faction and class_type (e.g. <code>human_hero_5</code> is faction=human / class_type=might, so the parent arena table is <code>arenaGame_humans_might_skills_table</code>). Materialized as a column for join convenience.
+* '''<code>level</code>''' is one of <code>2</code>, <code>4</code>, or <code>6</code> in every observed row — corresponding to the three level-up events of an arena game (which caps at level 6). The source structure stores levels as a list within one entry; the bot expands that to one row per (hero, level) so per-level queries are uniform.
+* '''<code>skill_id</code>''' uses the <code>arena_skill_*</code> namespace, since this only fires in arena mode.
+* '''<code>weight</code>''' is the raw bias weight (500 or 1000 in every observed row). For comparison, arena base weights top out at 225 for the heaviest combat skills, so a 1000-weight overlay decisively biases the offerings toward the named skill at those levels.
+
+== Example: <code>human_hero_5</code> ==
+The Knight hero <code>human_hero_5</code> uses the standard <code>humans_might_skills_table</code> in normal play (no overlay applies). In arena mode, they use <code>arenaGame_humans_might_skills_table</code> as the base, plus the following overlay rows:
+
+{| class="wikitable"
+! <code>hero_id</code> !! <code>level</code> !! <code>skill_id</code> !! <code>weight</code>
+|-
+| <code>human_hero_5</code> || 2 || <code>arena_skill_leadership</code> || 1000
+|-
+| <code>human_hero_5</code> || 4 || <code>arena_skill_leadership</code> || 1000
+|-
+| <code>human_hero_5</code> || 6 || <code>arena_skill_leadership</code> || 1000
+|}
+
+At those levels, the effective <code>arena_skill_leadership</code> weight becomes <code>150 (arena base) + 1000 (overlay) = 1150</code>, vs. a total pool weight of roughly <code>1500–1700</code>. The hero is very likely (but not guaranteed) to be offered Leadership on each of these levels.
+
+== Display-layer query ==
+'''All overlays for a specific hero:'''
+<pre>
+{{#cargo_query:
+  tables=SkillRollReplacement
+  | fields=level, skill_id, weight
+  | where=hero_id="human_hero_5"
+  | order by=level, skill_id
+  | format=table
+}}
+</pre>
+
+'''Effective arena weights at a specific hero/level''' (combines the hero's overlay with the arena table's base weights and the special bands). Cargo joins are left joins, so a hero+level pair with no overlay row falls through with NULL — wrap with <code>COALESCE</code> to keep the base weight intact:
+<pre>
+{{#cargo_query:
+  tables=SkillRollWeight=W, SkillRollBand=B, SkillRollReplacement=R
+  | join on=W.band_kind=B.id
+  | join on=W.table_id=R.arena_table_id AND W.skill_id=R.skill_id AND R.level=20
+  | fields=W.skill_id=Skill, SUM(W.weight + COALESCE(R.weight,0))=EffectiveWeight
+  | where=W.table_id="arenaGame_humans_might_skills_table"
+          AND B.levels HOLDS "20"
+  | group by=W.skill_id
+  | order by=EffectiveWeight DESC
+  | format=table
+}}
+</pre>
+
+== Related tables ==
+* [[Template:HeroDef|Hero]] — joined on <code>hero_id = Hero.id</code> (1:N).
+* [[Template:SkillRollTableDef|SkillRollTable]] — joined on <code>arena_table_id = SkillRollTable.id</code> (N:1).
+* [[Template:SkillRollWeightDef|SkillRollWeight]] — the arena table's base weights this overlay adds to.
+
+== Notes ==
+* This data only fires in arena mode. Standard-mode heroes use only the <code>SkillRollWeight</code> rows for their <code>SkillRollTable</code>; no overlays apply.
+* The arena game progression caps at 6 levels, which matches the maximum observed <code>level</code> value in this table.
+
+[[Category:Cargo Definitions]]
+</noinclude><includeonly>{{#cargo_store:_table=SkillRollReplacement
+| hero_id = {{{hero_id|}}}
+| arena_table_id = {{{arena_table_id|}}}
+| level = {{{level|}}}
+| skill_id = {{{skill_id|}}}
+| weight = {{{weight|}}}
+}}
+Created <code>SkillRollReplacement</code> entry: <code>{{{hero_id|}}}/{{{level|}}}/{{{skill_id|}}}</code></includeonly>

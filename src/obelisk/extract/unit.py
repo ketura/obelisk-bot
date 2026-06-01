@@ -280,7 +280,9 @@ def extract_units_enriched(paths: CorePaths) -> UnitExtractionResult:
         # D-021 (revised): one UnitAttack record per unit, with default/
         # counter/alt/alt2 slots. Pattern-passives ride on the slots'
         # passive_id field; they're no longer synthesized as UnitAbility rows.
-        unit_attack_record, todo_patterns = build_unit_attack(u)
+        unit_attack_record, todo_patterns = build_unit_attack(
+            u, shared_sids=shared,
+        )
         for tp in todo_patterns:
             logger.warning(
                 "Unmapped attack pattern_sid %r on unit %s — slot's passive_id set to TODO placeholder",
@@ -680,12 +682,51 @@ def _aura_fields_from_json(a_json: dict[str, Any]) -> dict[str, Any]:
 # ----------------------------------------------------------------------------
 
 
-# JSON `attackType_` -> Cargo `attack_type` enum (player-facing rename).
+# JSON `attackType_` -> coarse attack-archetype subtype. These are the
+# base variants; the fine-grained ones are refined from views (see below).
+# D-042 retired the old bespoke `ranged`/`reach` enum in favour of the
+# game's own SID-family tokens.
 _ATTACK_TYPE_FROM_JSON: dict[str, str] = {
-    "melee": "melee",
-    "shoot": "ranged",
-    "range": "reach",
+    "melee": "melee_attack",
+    "shoot": "ranged_attack",
+    "range": "remote_attack",
 }
+
+# Views-file passive SID -> fine-grained attack-archetype subtype. The
+# subtype is the SID minus the ``base_passive_`` prefix and ``_name``
+# suffix. The unit logic JSON carries only the coarse ``attackType_``;
+# the no_range / no_close / no_counter variants are encoded *only* in the
+# views passive a unit displays. See D-042.
+_ATTACK_ARCHETYPE_FROM_SID: dict[str, str] = {
+    "base_passive_melee_attack_name": "melee_attack",
+    "base_passive_melee_attack_no_counter_name": "melee_attack_no_counter",
+    "base_passive_ranged_attack_name": "ranged_attack",
+    "base_passive_ranged_attack_no_range_name": "ranged_attack_no_range",
+    "base_passive_ranged_attack_no_close_name": "ranged_attack_no_close",
+    "base_passive_ranged_attack_no_range_close_name": "ranged_attack_no_range_close",
+    "base_passive_remote_attack_name": "remote_attack",
+    "base_passive_remote_attack_penalty_name": "remote_attack_penalty",
+}
+
+
+def _refine_archetype(coarse: str | None, shared_sids: list[str]) -> str | None:
+    """Refine a default slot's coarse attack archetype using views SIDs.
+
+    ``coarse`` is the JSON-derived base subtype (``melee_attack`` /
+    ``ranged_attack`` / ``remote_attack``). Returns the fine-grained
+    variant if the unit's views passives include a *same-family* attack
+    SID, else ``None`` (keep coarse). The family guard prevents a
+    mismatched views passive from corrupting a slot whose damage profile
+    came from a different attack type.
+    """
+    if not coarse:
+        return None
+    family = coarse.split("_", 1)[0]
+    for sid in shared_sids:
+        arch = _ATTACK_ARCHETYPE_FROM_SID.get(sid)
+        if arch is not None and arch.split("_", 1)[0] == family:
+            return arch
+    return None
 
 # Top-level fields on an attack entry copied through (when present).
 _ATTACK_TOPLEVEL_MAP: tuple[tuple[str, str], ...] = (
@@ -787,7 +828,9 @@ def _build_attack_slot(
     return (AttackSlot(**fields), todo_pattern)
 
 
-def build_unit_attack(u: Unit) -> tuple[UnitAttack | None, list[str]]:
+def build_unit_attack(
+    u: Unit, shared_sids: list[str] | None = None,
+) -> tuple[UnitAttack | None, list[str]]:
     """Walk a Unit's default/counter/alternative attack arrays and produce
     a single :class:`UnitAttack` record with the four optional slots.
 
@@ -807,6 +850,16 @@ def build_unit_attack(u: Unit) -> tuple[UnitAttack | None, list[str]]:
         return None
 
     default_slot = first_slot(u.default_attacks)
+    # The fine-grained primary-attack archetype (no_range / no_close /
+    # no_counter variants) is encoded only in the unit's views passive,
+    # not in unit logic JSON. Refine the default slot's coarse attack_type
+    # when views supplies a same-family variant. See D-042.
+    if default_slot is not None and shared_sids:
+        refined = _refine_archetype(default_slot.attack_type, shared_sids)
+        if refined is not None:
+            default_slot = default_slot.model_copy(
+                update={"attack_type": refined}
+            )
     counter_slot = first_slot(u.counter_attacks)
 
     # Alternative attacks: take up to two. The first becomes ``alt``,

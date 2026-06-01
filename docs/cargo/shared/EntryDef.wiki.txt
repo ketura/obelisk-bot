@@ -61,7 +61,7 @@ Examples:
 {| class="wikitable"
 ! Type !! On disk !! On wiki
 |-
-| <code>attack_archetype</code> || <code>data/attack_archetype/melee.wiki.txt</code> || <code>Data:AttackArchetype/melee</code>
+| <code>attack_archetype</code> || <code>data/attack_archetype/melee_attack.wiki.txt</code> || <code>Data:AttackArchetype/melee_attack</code>
 |-
 | <code>movement</code> || <code>data/movement/fly.wiki.txt</code> || <code>Data:Movement/fly</code>
 |-
@@ -75,18 +75,28 @@ The directory→wiki-namespace mapping lives in <code>_DIR_TO_WIKI_TABLE</code> 
 == Initial canonical content ==
 These three types ship in the initial Entry rollout. Each row's name and description come from the L10n corpus via <code>name_sid</code> / <code>desc_sid</code> on every extract and land in the <code>Translation</code> table; the tables below summarize.
 
-=== <code>type=attack_archetype</code> (3 rows) ===
+=== <code>type=attack_archetype</code> (8 rows) ===
 {| class="wikitable"
 ! <code>subtype</code> !! display name (en) !! <code>name_sid</code>
 |-
-| <code>melee</code> || Melee Attack || <code>base_passive_melee_attack_name</code>
+| <code>melee_attack</code> || Melee Attack || <code>base_passive_melee_attack_name</code>
 |-
-| <code>ranged</code> || Ranged Attack || <code>base_passive_ranged_attack_name</code>
+| <code>melee_attack_no_counter</code> || Melee Attack || <code>base_passive_melee_attack_no_counter_name</code>
 |-
-| <code>reach</code> || Long Reach || <code>base_passive_remote_attack_name</code>
+| <code>ranged_attack</code> || Ranged Attack || <code>base_passive_ranged_attack_name</code>
+|-
+| <code>ranged_attack_no_range</code> || Ranged Attack || <code>base_passive_ranged_attack_no_range_name</code>
+|-
+| <code>ranged_attack_no_close</code> || Ranged Attack || <code>base_passive_ranged_attack_no_close_name</code>
+|-
+| <code>ranged_attack_no_range_close</code> || Ranged Attack || <code>base_passive_ranged_attack_no_range_close_name</code>
+|-
+| <code>remote_attack</code> || Long Reach || <code>base_passive_remote_attack_name</code>
+|-
+| <code>remote_attack_penalty</code> || Long Reach || <code>base_passive_remote_attack_penalty_name</code>
 |}
 
-JSON enum mapping (in <code>extract/unit.py</code>): <code>melee → melee</code>, <code>shoot → ranged</code>, <code>range → reach</code>. Naming flip on <code>range</code>→<code>reach</code>.
+'Subtype = the source L10n SID minus the <code>base_passive_</code> prefix and <code>_name</code> suffix' — the game'"'"'s own internal term, no bespoke renaming (D-042 retired the old <code>melee</code>/<code>ranged</code>/<code>reach</code> enum). The coarse JSON <code>attackType_</code> maps to the base subtype (<code>melee → melee_attack</code>, <code>shoot → ranged_attack</code>, <code>range → remote_attack</code>); the fine-grained variant (<code>_no_range</code> / <code>_no_close</code> / <code>_no_counter</code>) is read from the unit'"'"'s views-file passive SID — the only place the distinction is encoded. <code>remote_attack_penalty</code> ships with zero current units (no unit'"'"'s views equips it) but is a real game passive kept for completeness.
 
 === <code>type=movement</code> (2 rows) ===
 {| class="wikitable"

@@ -129,6 +129,46 @@ sub-skill the skill's levels reference (with the sub-skill's own bonus
 rows folded in). Orphan sub-skills land on the catch-all
 `Data:Skill/_orphan_sub_skills` page.
 
+## SkillRollTable
+
+When a hero levels up, the game draws from a weighted skill pool keyed
+on the hero's class (Knight, Cleric, Death Knight, etc.). Each
+`Data:SkillRollTable/<id>` page carries the header row plus every
+weighted skill entry that makes up that class's roll table — both the
+default-band weights that apply on every level-up and the milestone
+overlays that fire on specific levels. Two parallel sets: 12 standard
+tables (one per class), and 12 arena tables (used only in arena game
+modes; they reference distinct `arena_skill_*` SIDs and have smaller
+pools).
+
+## SkillRollBand
+
+Reference table of four rows describing the level grids the roll
+overlays fire on. The default band applies to every level (1-50); the
+three milestone overlays add weight to specific skill subsets at
+mod-4 levels, mod-5 levels, and level 20. Overlays are *additive* on
+top of the default — at level 20 the effective magic-school weights
+are tripled, not just doubled.
+
+## StatBonusRoll
+
+The 12 "pseudo-skill" fallback entries the engine draws from when a
+hero's main roll pool can't supply three valid offerings — i.e. when
+they have no learnable new skills remaining *and* fewer than three
+unexpert skills they could rank up. Each row grants a permanent flat
+boost to one primary stat (offence, defence, spell power,
+intelligence) at one of three magnitude tiers (+1, +2, +3). The +1
+tier dominates with 99% of fallback rolls; the +3 tier sits at one in
+~40,000.
+
+## SkillRollReplacement
+
+Per-hero overlays that bias certain arena heroes toward specific
+skills at the early arena levels. 28 heroes get one or more
+`arena_skill_*` SIDs added at levels 2/4/6 with weight 500 or 1000 —
+enough to make that skill very likely but not guaranteed. Only fires
+in arena mode; standard play sees no replacements.
+
 ## AstrologistEvent
 
 Astrologist events are the periodically-rolled global modifiers

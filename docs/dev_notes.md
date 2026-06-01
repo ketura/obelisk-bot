@@ -8,6 +8,52 @@ field notes from someone who has stepped on these rakes.
 
 ### Bash-mount truncation gremlin
 
+> **TL;DR — read this before editing any source file in this repo.**
+>
+> The `Edit` and `Write` tools silently truncate non-trivial edits to
+> files over ~30 KB (and sometimes smaller). The file looks fine to the
+> `Read` tool but the bash-mount view — which is what Python actually
+> compiles — is missing its tail. A stale `.pyc` then masks the damage,
+> so `obelisk extract` "succeeds" while running pre-edit code.
+>
+> **Do not use `Edit`/`Write` for non-trivial edits. Use a bash-Python
+> full-file patch instead, every time:**
+>
+> ```bash
+> .venv-sandbox/bin/python << 'PYEOF'
+> from pathlib import Path
+> import ast
+>
+> def patch(path, old, new, count=1):
+>     p = Path(path)
+>     src = p.read_text()
+>     n = src.count(old)
+>     if n != count:
+>         raise AssertionError(f"{path}: anchor matched {n}x, expected {count}")
+>     p.write_text(src.replace(old, new))
+>
+> patch("src/obelisk/extract/unit.py", "<exact old text>", "<exact new text>")
+> # ...more patch() calls...
+>
+> ast.parse(Path("src/obelisk/extract/unit.py").read_text())  # verify
+> PYEOF
+> ```
+>
+> **Why it works:** `Path.write_text()` is one full-file write — it
+> syncs both mount sides at identical content. `Edit`/`Write`
+> round-trip a diff through the mount and the tail gets dropped. The
+> single-match `count` assertion makes a stale anchor fail loudly
+> instead of silently mis-patching; the trailing `ast.parse()` catches
+> any damage on the spot. Whole-new files are fine to create with the
+> `Write` tool — the truncation only bites edits that grow an existing
+> large file.
+>
+> This exact method has been re-derived from scratch in at least four
+> separate sessions (D-021, D-040, the skill-roll work, the
+> attack-archetype work). It works. Reach for it first. Escalate to the
+> git-archive mirror recipe (further down) only when a file is
+> *already* corrupted on disk and you need a known-good baseline.
+
 **Symptom:** Bash inside the workspace VM reads a Python file at N lines
 when the canonical Windows-side file is N+200 lines. Running Python
 through that mount sees the truncated view; AST parses fail with
@@ -21,8 +67,10 @@ damage during the D-021 work. Each fix made the file worse.
 
 **Workarounds:**
 
-- **For files over ~500 lines, use the `Edit` tool exclusively.** It
-  writes through the Windows side directly and bypasses the mount lag.
+- ~~**For files over ~500 lines, use the `Edit` tool exclusively.**~~
+  '''SUPERSEDED''' — see the TL;DR box above. The `Edit` tool is *not*
+  reliable for large files; it was the original (wrong) guess and cost
+  multiple sessions. Use the bash-Python full-file patch.
 - **If bash is the only option, do full-file rewrites** (`cat > file
   <<EOF ... EOF`) — never `>>` appends. A full rewrite syncs both
   sides at the same content; an append diverges.

@@ -1,0 +1,65 @@
+<noinclude>
+One row per skill-roll table — '''24 rows''' total: the 12 standard (one per (faction, class_type)) plus 12 arena counterparts.
+
+This is the '''header row''' for a roll table. The actual weights live in
+<code>SkillRollWeightDef</code> rows on the same page, joined via <code>table_id</code>.
+
+Heroes point at a row here via the existing <code>HeroClassDef.skills_roll_variant</code> column (matches <code>SkillRollTable.id</code>). The redundant <code>class_id</code> column lets display templates also join in the other direction (<code>HeroClass.id = SkillRollTable.class_id</code>) without going through the variant name.
+
+A roll table is "the weighted urn." The engine's slot-assignment logic (slot 1 = guaranteed upgrade of an existing non-Expert skill if any; slots 2-3 = weighted picks from this urn; pseudo-skill fallback when the urn can't supply 3 valid offerings) is '''not''' encoded in this data — it lives in game code we don't see. See <code>SkillRollWeightDef</code> for the per-skill weights and <code>SkillRollBandDef</code> for the level-grid metadata.
+
+== Schema ==
+{{#cargo_declare:_table=SkillRollTable
+| id = String
+| class_id = String
+| faction = String (allowed values=human,undead,dungeon,nature,demon,unfrozen)
+| class_type = String (allowed values=might,magic)
+| mode = String (allowed values=standard,arena)
+| source_path = String
+}}
+
+<pre><nowiki>
+{{SkillRollTableDef
+| id = String                  <!-- e.g. humans_might_skills_table -->
+| class_id = String            <!-- e.g. might_human, matches HeroClass.id -->
+| faction = String (allowed values=human,undead,dungeon,nature,demon,unfrozen)
+| class_type = String (allowed values=might,magic)
+| mode = String (allowed values=standard,arena)
+| source_path = String         <!-- e.g. Core/DB/heroes_skills/skills_by_level_tables/humans_might_skills_table.json -->
+}}
+</nowiki></pre>
+
+== Field notes ==
+* '''<code>id</code>''' is the source-JSON's <code>id</code> field, matching the file basename. Standard tables: <code><faction_folder>_<class_type>_skills_table</code> (e.g. <code>humans_might_skills_table</code>, <code>necros_magic_skills_table</code>). Arena tables: <code>arenaGame_<faction_folder>_<class_type>_skills_table</code>.
+* '''<code>class_id</code>''' is the canonical HeroClass id (<code><class_type>_<faction></code>, e.g. <code>might_human</code>), '''not''' the source folder spelling. Note the faction normalization: source folders use <code>humans/demons/necros</code> (plural / archaic), but the <code>fraction</code> field — and therefore <code>class_id</code> — uses the singular <code>human/demon/undead</code> form. Both <code>standard</code> and <code>arena</code> tables for the same class share the same <code>class_id</code>; query by <code>mode</code> to disambiguate.
+* '''<code>mode</code>''' separates the 12 standard tables (used in main-game level-ups) from the 12 arena tables (used in arena game modes; reference different SIDs under the <code>arena_skill_*</code> namespace). The arena table content is a deliberate transform of the standard — combat and magic-mastery skills get ~1.5× weight, adventure-map skills (logistics, scouting, economy, diplomacy, enlightenment, trainer, siege) are dropped entirely.
+* '''<code>source_path</code>''' is the relative path of the source JSON under the patch root, kept for traceability and to make the audit's "this table changed" report easy to follow.
+
+== Universal pool composition ==
+Every standard table holds exactly '''24 skills''':
+* 22 '''universal''' non-faction skills (every class can roll these — including all four magic-element schools <code>day/night/space/primal</code> and all four magic-mastery skills <code>sorcery/mastery/summoner/battlemage</code>)
+* 1 '''class-signature''' skill: <code>skill_battle_artistry</code> in might tables, <code>skill_wisdom</code> in magic tables. Mutually exclusive at the data level — no engine-side filtering needed.
+* 1 '''own-faction''' skill (e.g. <code>skill_faction_humans</code> in humans tables).
+
+Class identity is encoded entirely in the weight differences plus the signature swap. The magic-element block (<code>day=80, night=20, space=60, primal=40</code>) is '''class-invariant''' — a might hero has the same per-school magic-roll weights as a magic hero. Faction-thematic magic preference (if any) lives in specializations / faction laws / hero start kits, not here.
+
+== Related tables ==
+* [[Template:SkillRollWeightDef|SkillRollWeight]] — the per-skill weight rows (1:N, ~36 per table for standard).
+* [[Template:SkillRollBandDef|SkillRollBand]] — small shared reference table listing the levels each band covers.
+* [[Template:HeroClassDef|HeroClass]] — joined on <code>HeroClass.id = SkillRollTable.class_id</code> (1:N — each class has both a standard and an arena roll table). Also reachable via <code>HeroClass.skills_roll_variant = SkillRollTable.id</code> (1:1, picks one mode).
+* [[Template:SkillRollReplacementDef|SkillRollReplacement]] — per-hero arena overrides; applies on top of an arena table's weights, not over a standard table.
+
+== Notes ==
+* The 50-level grid embedded in source <code>skills_by_level_tables</code> is design-space padding. The current shipping mechanics cap effective skill progression at ~24 level-ups (8 skill slots × 3 ranks); every band entry above that level is unreachable under current rules.
+* Campaign / custom-map / tutorial roll-table variants under <code>skills_by_level_tables/campaign/</code> and <code>.../custom_maps/</code> are '''not''' currently extracted — see deferral note in <code>decisions.md</code>.
+
+[[Category:Cargo Definitions]]
+</noinclude><includeonly>{{#cargo_store:_table=SkillRollTable
+| id = {{{id|}}}
+| class_id = {{{class_id|}}}
+| faction = {{{faction|}}}
+| class_type = {{{class_type|}}}
+| mode = {{{mode|}}}
+| source_path = {{{source_path|}}}
+}}
+Created <code>SkillRollTable</code> entry: <code>{{{id|}}}</code></includeonly>

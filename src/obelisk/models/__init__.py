@@ -60,6 +60,15 @@ from obelisk.models.skill import (
     SkillRecord,
     SubSkillRecord,
 )
+from obelisk.models.skill_roll import (
+    BAND_KINDS,
+    SkillRollBandRecord,
+    SkillRollExtractionResult,
+    SkillRollReplacementRecord,
+    SkillRollTableRecord,
+    SkillRollWeightRecord,
+    StatBonusRollRecord,
+)
 from obelisk.models.spell import (
     SpellExtractionResult,
     SpellRankRecord,
@@ -119,9 +128,16 @@ __all__ = [
     "ResourceCost",
     "Sid",
     "SidRef",
+    "BAND_KINDS",
     "SkillExtractionResult",
     "SkillLevelRecord",
     "SkillRecord",
+    "SkillRollBandRecord",
+    "SkillRollExtractionResult",
+    "SkillRollReplacementRecord",
+    "SkillRollTableRecord",
+    "SkillRollWeightRecord",
+    "StatBonusRollRecord",
     "SpellExtractionResult",
     "SpellRankRecord",
     "SpellRecord",
