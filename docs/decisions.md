@@ -91,11 +91,11 @@ Stat changes, ability changes, cost changes, English text changes, non-English t
 - Runtime: pydantic v2, mwclient, typer, rich
 - Dev: ruff, mypy strict, pytest
 - Env: stdlib `venv` + `pip` (no uv required; uv works fine if developer prefers)
-- Python: 3.10+ (see horizon note below)
+- Python: 3.11+ (see horizon note below)
 
 The diff is hand-rolled, not `deepdiff`. Wikitext is f-string-rendered, not jinja. Both decisions are about *quality of output*, not avoiding deps for their own sake.
 
-**Python 3.10 horizon note (2026-05-01):** Floor was originally 3.11 but lowered to 3.10 to match the assistant's sandbox runtime. CPython 3.10 reaches EOL October 2026; revisit and bump the floor to 3.11+ when the sandbox upgrades or before the project's first stable release, whichever comes first. The only feature this floor change cost us was `enum.StrEnum` (replaced with `class Faction(str, Enum)` — equivalent for our uses).
+**Python 3.10 horizon note (2026-05-01) — RESOLVED 2026-06-02.** The floor was temporarily lowered from 3.11 to 3.10 to match the assistant's sandbox runtime, which cost us exactly one feature: `enum.StrEnum` (replaced with `class Faction(str, Enum)` plus a manual `__str__` override — equivalent for our uses). The floor is now restored to **3.11**: `requires-python = ">=3.11"`, ruff `target-version = "py311"`, mypy `python_version = "3.11"`, and `Faction` is once again a plain `enum.StrEnum`. For the record: an audit of `src/` found **no** Python-version-sensitive stdlib usage, and the `(str, Enum)` swap did not crash on any of 3.10–3.14 because of the `__str__` override — so this floor change was never the cause of a contributor's newer-interpreter breakage. Next horizon: PEP 695 `type X = ...` alias syntax needs a 3.12 floor; revisit when the floor moves again.
 
 ## D-010 — First entity end-to-end: Units
 

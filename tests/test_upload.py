@@ -221,6 +221,46 @@ def test_connect_is_cached(monkeypatch: pytest.MonkeyPatch) -> None:
     assert first is second
 
 
+def test_connect_passes_prewarmed_pool_with_exact_user_agent_when_cookies_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cloudflare-bypass regression guard.
+
+    When ``cookies`` are configured, the pre-warmed session must reach
+    mwclient via ``pool=`` carrying the configured User-Agent *verbatim*
+    (no ``mwclient/<ver>`` suffix) and the parsed cookies. The no-pool
+    path overwrites the UA, which no longer matches the UA cf_clearance
+    was issued against — Cloudflare then 403s the first siteinfo call.
+    """
+    _install_fake_mwclient(monkeypatch)
+    ua = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"
+    )
+    cfg = _config(user_agent=ua, cookies="cf_clearance=ABC123; __cf_bm=XYZ")
+    client = WikiClient(cfg)
+
+    site = client._connect()
+
+    pool = site.kwargs.get("pool")
+    assert pool is not None, "prewarmed session must be threaded via pool="
+    # Exact UA — the byte-for-byte match cf_clearance requires.
+    assert pool.headers["User-Agent"] == ua
+    assert pool.cookies.get("cf_clearance") == "ABC123"
+    assert pool.cookies.get("__cf_bm") == "XYZ"
+
+
+def test_connect_omits_pool_when_no_cookies(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Without cookies there's no CF bypass — mwclient builds its own
+    session, so ``pool`` must not be passed."""
+    _install_fake_mwclient(monkeypatch)
+    client = WikiClient(_config(cookies=""))
+
+    site = client._connect()
+
+    assert "pool" not in site.kwargs
+
+
 # ---------------------------------------------------------------------------
 # WikiClient: rate limiting
 # ---------------------------------------------------------------------------

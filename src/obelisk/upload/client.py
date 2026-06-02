@@ -13,16 +13,15 @@ Responsibilities:
   caller without context.
 * Optional Cloudflare-bypass: when ``WikiConfig.cookies`` is set, build
   a pre-warmed ``requests.Session`` carrying those cookies plus the
-  configured User-Agent and inject it into mwclient so the very first
-  API call (siteinfo, which fires inside ``mwclient.Site.__init__``)
-  already passes CF's managed challenge.
+  configured User-Agent and hand it to mwclient via its ``pool``
+  parameter so the very first API call (siteinfo, which fires inside
+  ``mwclient.Site.__init__``) already passes CF's managed challenge.
 """
 
 from __future__ import annotations
 
 import logging
 import time
-from contextlib import contextmanager
 from dataclasses import dataclass
 
 from obelisk.upload.config import WikiConfig, parse_cookies
@@ -35,29 +34,6 @@ class UploadResult:
     title: str
     status: str  # written | unchanged | failed
     detail: str = ""
-
-
-@contextmanager
-def _injected_session(session):
-    """Temporarily make ``requests.Session()`` return ``session``.
-
-    mwclient builds its connection by calling ``requests.Session()``
-    inside ``Site.__init__``, and the first API call fires immediately
-    after — there's no post-construction injection point that runs
-    *before* the request goes out. Patching the factory globally for
-    the duration of construction is the least-fragile way to thread a
-    pre-warmed session (cookies + UA) through.
-
-    Restores the original factory on exit, including if construction
-    raised.
-    """
-    import requests
-    orig = requests.Session
-    requests.Session = lambda *a, **kw: session  # type: ignore[assignment]
-    try:
-        yield
-    finally:
-        requests.Session = orig  # type: ignore[assignment]
 
 
 class WikiClient:
@@ -101,10 +77,14 @@ class WikiClient:
         cookies and User-Agent, or ``None`` when no cookies are
         configured (skip the bypass path entirely).
 
-        cf_clearance is bound to the User-Agent that issued it, so we
-        set the UA on the session BEFORE any request goes out — this
-        overrides mwclient's default ``MwClient/x.y …`` prefix that CF
-        would otherwise see on the first call.
+        cf_clearance is bound to the *exact* User-Agent that issued it,
+        so we set the UA on the session here and then hand the session
+        to mwclient via ``pool=`` (see :meth:`_connect`). The ``pool``
+        path is the one branch in ``mwclient.Site.__init__`` that does
+        NOT rewrite ``connection.headers['User-Agent']`` — the default
+        path appends ``mwclient/<ver> (...)`` to ``clients_useragent``,
+        which would make the UA differ from the cookie's and trip CF's
+        re-challenge (a 403 on the first siteinfo call).
         """
         cookies = parse_cookies(self.config.cookies)
         if not cookies:
@@ -132,12 +112,18 @@ class WikiClient:
             "scheme": self.config.scheme,
         }
 
+        # When CF cookies are configured, pass the pre-warmed session via
+        # mwclient's supported ``pool`` parameter. That branch leaves the
+        # session's User-Agent exactly as we set it; the no-pool branch
+        # would overwrite it with ``<clients_useragent> mwclient/<ver>``,
+        # whose appended suffix no longer matches the UA cf_clearance was
+        # issued against — Cloudflare then re-challenges and the first
+        # siteinfo call 403s. ``clients_useragent`` is ignored on the pool
+        # path, so it stays harmlessly for the non-CF case.
         prewarmed = self._build_prewarmed_session()
         if prewarmed is not None:
-            with _injected_session(prewarmed):
-                site = mwclient.Site(self.config.host, **site_kwargs)
-        else:
-            site = mwclient.Site(self.config.host, **site_kwargs)
+            site_kwargs["pool"] = prewarmed
+        site = mwclient.Site(self.config.host, **site_kwargs)
         # mwclient exposes maxlag via the api() kwarg path; setting it
         # on the Site is supported and threaded into every write.
         if self.config.maxlag > 0:

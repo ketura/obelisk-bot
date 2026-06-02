@@ -36,20 +36,17 @@ maxlag = 5
 #      resolve (usually instant — you'll see the article).
 #   2. F12 -> Application -> Storage -> Cookies -> https://wiki.hoodedhorse.com.
 #   3. Find `cf_clearance` and copy its Value.
-#   4. (Optional but recommended:) also copy `__cf_bm` and any
-#      MediaWiki session cookies (`<wikiprefix>_session`,
-#      `<wikiprefix>UserName`, `<wikiprefix>UserID`).
-#   5. In the same devtools, look at Network -> any request -> Request
+#   4. In the same devtools, look at Network -> any request -> Request
 #      Headers and copy the entire `User-Agent` string verbatim. Set it
 #      as `user_agent` above. cf_clearance is bound to the UA that
 #      issued it; if they don't match, CF re-challenges.
-#   6. Paste the cookies below as `name=value; name=value; ...`.
+#   5. Paste the cookie below as `cf_clearance=<value>`.
 #
-# Cookies expire (cf_clearance lives ~30 minutes to a few hours). If the
+# The cf_clearance cookie expires (~30 minutes to a few hours). If the
 # bot starts failing mid-run with 403s, refresh the browser tab and
-# repeat steps 3-6.
+# repeat steps 3-5.
 #
-# cookies = cf_clearance=xxxxx; __cf_bm=yyyyy; my_wiki_session=zzzzz
+# cookies = cf_clearance=xxxxx
 
 # --- Local test wiki example -----------------------------------------------
 # Swap the live values above for these to point at a local MediaWiki:

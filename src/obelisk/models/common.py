@@ -2,21 +2,18 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import TypeAlias
 
 from pydantic import BaseModel, ConfigDict
 
 
-class Faction(str, Enum):
+class Faction(StrEnum):
     """The six factions in Olden Era as of release, plus neutral.
 
     Source files use "fraction" (translation artifact); we normalize to the
     correct English here. The string values match the ``id`` field in
     ``Core/DB/fractions/*.json``.
-
-    Subclasses ``str`` rather than ``StrEnum`` to support Python 3.10
-    (``StrEnum`` is 3.11+). Behavior is equivalent for our uses.
     """
 
     HUMAN = "human"
@@ -27,13 +24,10 @@ class Faction(str, Enum):
     UNFROZEN = "unfrozen"
     NEUTRAL = "neutral"
 
-    def __str__(self) -> str:
-        return self.value
-
 
 # Type alias: a SID is just a string, but giving it a name makes intent obvious
 # in canonical record types and emitter code. Using PEP 484 TypeAlias rather
-# than PEP 695 ``type`` syntax to keep Python 3.10 compatibility.
+# than PEP 695 ``type`` syntax to keep Python 3.11 compatibility (``type`` is 3.12+).
 Sid: TypeAlias = str
 
 
